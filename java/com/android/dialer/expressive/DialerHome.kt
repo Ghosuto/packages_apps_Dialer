@@ -14,7 +14,7 @@
  * limitations under the License
  */
 
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.android.dialer.expressive
 
 import android.provider.CallLog.Calls
@@ -27,13 +27,11 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -42,20 +40,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import com.android.dialer.R
-import kotlinx.coroutines.awaitCancellation
 
 @Composable
 fun DialerHome(
     data: DialerData, loading: Boolean, error: Boolean, tab: Int, query: String, digits: String,
     keypad: Boolean, compactFloatingBar: Boolean = false, hideKeyboardOnScroll: Boolean = true,
-    groupContactsByName: Boolean = true,
+    groupContactsByName: Boolean = true, bottomDialpadBackspace: Boolean = false,
     onTab: (Int) -> Unit, onQuery: (String) -> Unit, onDigits: (String) -> String,
     onKeypad: (Boolean) -> Unit, onCall: (String) -> Unit, onVideo: (String) -> Unit, onVoicemail: () -> Unit,
     onPermissions: () -> Unit, onRetry: () -> Unit, onStar: (Person) -> Unit,
@@ -282,83 +275,9 @@ fun DialerHome(
             }
         }
     }
-    if (keypad) ModalBottomSheet(onDismissRequest = { onKeypad(false) }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        val keyboard = LocalSoftwareKeyboardController.current
-        LaunchedEffect(Unit) { keyboard?.hide() }
-        var input by remember { mutableStateOf(TextFieldValue(digits, TextRange(digits.length))) }
-        LaunchedEffect(digits) {
-            // The activity may normalize input or replace it through a new dial intent.
-            if (input.text != digits) input = TextFieldValue(digits, TextRange(digits.length))
-        }
-        fun updateInput(value: TextFieldValue) {
-            val normalized = normalizeDialpadInput(value)
-            val accepted = onDigits(normalized.text)
-            input = if (accepted == normalized.text) normalized else TextFieldValue(accepted, TextRange(accepted.length))
-        }
-        Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
-            Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    InterceptPlatformTextInput(interceptor = { _, _ -> awaitCancellation() }) {
-                        TextField(input, { updateInput(it) }, Modifier.weight(1f),
-                            textStyle = MaterialTheme.typography.headlineLarge.copy(textAlign = TextAlign.Center),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, showKeyboardOnFocus = false),
-                            placeholder = { Text(stringResource(R.string.expressive_enter_number),
-                                Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
-                    }
-                    ExpressiveTile(onClick = { updateInput(deleteDialpadSelection(input)) },
-                        onLongClick = { updateInput(TextFieldValue("")) },
-                        onLongClickLabel = stringResource(R.string.expressive_clear_number),
-                        enabled = input.text.isNotEmpty(), highlightOnPress = true,
-                        modifier = Modifier.width(56.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
-                        Symbol(DialerSymbol.Backspace, stringResource(R.string.expressive_backspace))
-                    }
-                }
-            }
-            val numberMatches = remember(data.people, digits) {
-                if (digits.isBlank()) emptyList() else data.people.filter { matches(it.name, it.number, digits) }.take(3)
-            }
-            if (numberMatches.isNotEmpty()) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
-                    numberMatches.forEach { match ->
-                        TextButton(
-                            onClick = { onCall(match.number) },
-                            modifier = Modifier.fillMaxWidth(),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-                            content = {
-                                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                                    Text("${match.name} · ${match.number}", maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis)
-                                }
-                            }
-                        )
-                    }
-                }
-            } else {
-                TextButton(onClick = { onAddContact(digits) }, enabled = digits.isNotBlank()) {
-                    Text(stringResource(R.string.expressive_create_contact))
-                }
-            }
-            DialerKeypad(onDigit = { updateInput(replaceDialpadSelection(input, it)) }, onLongDigit = { digit ->
-                when (digit) {
-                    "0" -> updateInput(replaceDialpadSelection(input, "+"))
-                    "1" -> if (input.text.isEmpty()) onVoicemail() else updateInput(replaceDialpadSelection(input, digit))
-                    else -> updateInput(replaceDialpadSelection(input, digit))
-                }
-            })
-            ExpressiveTile(onClick = { onCall(digits) }, enabled = digits.isNotBlank(),
-                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
-                Symbol(DialerSymbol.Phone); Text(stringResource(R.string.expressive_call), Modifier.padding(start = 12.dp),
-                    style = MaterialTheme.typography.titleLarge)
-            }
-        }
-    }
+    if (keypad) DialpadSheet(data.people, digits, bottomDialpadBackspace,
+        onDismiss = { onKeypad(false) }, onDigits = onDigits, onCall = onCall,
+        onVoicemail = onVoicemail, onAddContact = onAddContact)
     person?.let { selected ->
         val updated = data.people.firstOrNull { it.id == selected.id && it.number == selected.number } ?: selected
         NumberActionsDialog(updated.name, updated.number, updated.starred, true,

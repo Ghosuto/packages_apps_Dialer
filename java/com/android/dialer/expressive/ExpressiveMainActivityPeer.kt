@@ -57,6 +57,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
     private var compactFloatingBar by mutableStateOf(false)
     private var hideKeyboardOnScroll by mutableStateOf(true)
     private var groupContactsByName by mutableStateOf(true)
+    private var bottomDialpadBackspace by mutableStateOf(false)
     private var job: Job? = null
     private var observing = false
     private var photoNumber: String? = null
@@ -104,6 +105,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
                         compactFloatingBar = compactFloatingBar,
                         hideKeyboardOnScroll = hideKeyboardOnScroll,
                         groupContactsByName = groupContactsByName,
+                        bottomDialpadBackspace = bottomDialpadBackspace,
                         onTab = { tab = it; query = "" }, onQuery = { query = it },
                         onDigits = { updateDigits(it) }, onKeypad = { keypad = it },
                         onCall = { call(it) }, onVideo = { call(it, true) }, onVoicemail = { voicemail() },
@@ -210,6 +212,8 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
             .getBoolean("hide_keyboard_on_scroll", true)
         groupContactsByName = PreferenceManager.getDefaultSharedPreferences(activity)
             .getBoolean("group_contacts_by_name", true)
+        bottomDialpadBackspace = PreferenceManager.getDefaultSharedPreferences(activity)
+            .getBoolean("bottom_dialpad_backspace", false)
         refresh()
         if (!observing) {
             activity.contentResolver.registerContentObserver(Calls.CONTENT_URI, true, observer)

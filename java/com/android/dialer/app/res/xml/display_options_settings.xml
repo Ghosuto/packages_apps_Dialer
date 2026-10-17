@@ -84,6 +84,13 @@
       app:iconSpaceReserved="false"/>
 
   <SwitchPreferenceCompat
+      android:key="bottom_dialpad_backspace"
+      android:title="@string/expressive_bottom_dialpad_backspace"
+      android:summary="@string/expressive_bottom_dialpad_backspace_summary"
+      android:defaultValue="false"
+      app:iconSpaceReserved="false"/>
+
+  <SwitchPreferenceCompat
       android:key="hide_keyboard_on_scroll"
       android:title="@string/hide_keyboard_on_scroll_title"
       android:summary="@string/hide_keyboard_on_scroll_summary"

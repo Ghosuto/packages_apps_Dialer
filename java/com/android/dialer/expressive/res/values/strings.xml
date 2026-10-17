@@ -100,6 +100,8 @@
     <string name="expressive_create_contact">Create contact</string>
     <string name="expressive_enter_number">Enter a number</string>
     <string name="expressive_backspace">Delete last digit</string>
+    <string name="expressive_bottom_dialpad_backspace">Backspace beside Call</string>
+    <string name="expressive_bottom_dialpad_backspace_summary">Move backspace to the bottom of the dialpad and suggestions above the number field to reduce accidental calls</string>
     <string name="expressive_call">Call</string>
     <string name="expressive_call_person">Call %1$s</string>
     <string name="expressive_message">Message</string>
