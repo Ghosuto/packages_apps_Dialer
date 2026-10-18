@@ -61,7 +61,7 @@ internal fun DialpadSheet(
             input = if (accepted == normalized.text) normalized else TextFieldValue(accepted, TextRange(accepted.length))
         }
         val numberMatches = remember(people, digits) {
-            if (digits.isBlank()) emptyList() else people.filter { matches(it.name, it.number, digits) }.take(3)
+            if (digits.isBlank()) emptyList() else searchPeople(people, digits).take(3)
         }
         val keypad: @Composable () -> Unit = {
             DialerKeypad(onDigit = { updateInput(replaceDialpadSelection(input, it)) }, onLongDigit = { digit ->
