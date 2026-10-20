@@ -75,6 +75,7 @@
     <string name="expressive_phone">Phone</string>
     <string name="expressive_recents">Recents</string>
     <string name="expressive_favorites">Favorites</string>
+    <string name="expressive_speed_dial">Speed dial</string>
     <string name="expressive_contacts">Contacts</string>
     <string name="expressive_voicemail">Voicemail</string>
     <string name="expressive_settings">Settings</string>
@@ -207,4 +208,15 @@
     <string name="expressive_choose_audio">Call audio</string>
     <string name="expressive_photo_hint">Touch and hold a person or number to set their caller photo.</string>
     <string name="expressive_photo_failed">Couldn’t save that photo. Try another image.</string>
+    <string name="expressive_speed_dial_hint">Hold a key to call quickly</string>
+    <string name="expressive_speed_dial_hint_summary">Press and hold 2–9 on the keypad to call an assigned contact or number.</string>
+    <string name="expressive_speed_dial_unassigned">Not assigned</string>
+    <string name="expressive_speed_dial_assign_summary">Tap Assign to choose a contact or enter a number.</string>
+    <string name="expressive_speed_dial_assign">Assign</string>
+    <string name="expressive_speed_dial_remove">Remove speed dial assignment</string>
+    <string name="expressive_speed_dial_assign_title">Assign key %1$d</string>
+    <string name="expressive_speed_dial_contact_or_number">Contact or phone number</string>
+    <string name="expressive_speed_dial_contacts_unavailable">Contacts are unavailable. You can still enter a phone number.</string>
+    <string name="expressive_speed_dial_use_number">Use this number</string>
+    <string name="expressive_speed_dial_unassigned_key">Key %1$d is not assigned.</string>
 </resources>

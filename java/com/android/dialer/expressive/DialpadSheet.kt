@@ -44,9 +44,9 @@ import kotlinx.coroutines.awaitCancellation
 
 @Composable
 internal fun DialpadSheet(
-    people: List<Person>, digits: String, bottomBackspace: Boolean,
+    people: List<Person>, speedDial: Map<Int, SpeedDialEntry>, digits: String, bottomBackspace: Boolean,
     onDismiss: () -> Unit, onDigits: (String) -> String, onCall: (String) -> Unit,
-    onVoicemail: () -> Unit, onAddContact: (String) -> Unit
+    onVoicemail: () -> Unit, onAddContact: (String) -> Unit, onSpeedDial: (Int) -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -54,7 +54,6 @@ internal fun DialpadSheet(
         LaunchedEffect(Unit) { keyboard?.hide() }
         var input by remember { mutableStateOf(TextFieldValue(digits, TextRange(digits.length))) }
         LaunchedEffect(digits) {
-            // The activity may normalize input or replace it through a new dial intent.
             if (input.text != digits) input = TextFieldValue(digits, TextRange(digits.length))
         }
         fun updateInput(value: TextFieldValue) {
@@ -70,7 +69,11 @@ internal fun DialpadSheet(
                 when (digit) {
                     "0" -> updateInput(replaceDialpadSelection(input, "+"))
                     "1" -> if (input.text.isEmpty()) onVoicemail() else updateInput(replaceDialpadSelection(input, digit))
-                    else -> updateInput(replaceDialpadSelection(input, digit))
+                    else -> {
+                        val key = digit.toInt()
+                        val entry = speedDial[key]
+                        if (entry == null) onSpeedDial(key) else onCall(entry.number)
+                    }
                 }
             })
         }
@@ -82,8 +85,6 @@ internal fun DialpadSheet(
                     DialpadNumberField(input, ::updateInput, inlineBackspace = false)
                     keypad()
                 }
-                // Keep both actions outside the scroll area. Changing matches or clearing the
-                // last digit must never move a call target into the backspace button's place.
                 Row(Modifier.fillMaxWidth().padding(vertical = 16.dp).height(IntrinsicSize.Min),
                     horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     DialpadCallButton(digits, onCall, Modifier.weight(1f).fillMaxHeight().heightIn(min = 64.dp))

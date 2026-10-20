@@ -169,7 +169,13 @@ fun FloatingDialerBar(
     onSelect: (Int) -> Unit,
     compact: Boolean = false
 ) {
-    val icons = listOf(DialerSymbol.History, DialerSymbol.Star, DialerSymbol.People, DialerSymbol.Voicemail)
+    val icons = listOf(
+        DialerSymbol.History,
+        DialerSymbol.Keypad,
+        DialerSymbol.Star,
+        DialerSymbol.People,
+        DialerSymbol.Voicemail
+    )
     val haptic = LocalHapticFeedback.current
     Surface(shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 0.dp, tonalElevation = 2.dp,

@@ -53,6 +53,8 @@ fun DialerHome(
     onTab: (Int) -> Unit, onQuery: (String) -> Unit, onDigits: (String) -> String,
     onKeypad: (Boolean) -> Unit, onCall: (String) -> Unit, onVideo: (String) -> Unit, onVoicemail: () -> Unit,
     onPermissions: () -> Unit, onRetry: () -> Unit, onStar: (Person) -> Unit,
+    speedDial: Map<Int, SpeedDialEntry>, onAssignSpeedDial: (Int, SpeedDialEntry) -> Unit,
+    onRemoveSpeedDial: (Int) -> Unit, onSpeedDial: (Int) -> Unit,
     onDelete: (List<RecentCall>, (Boolean) -> Unit) -> Unit,
     onAddContact: (String) -> Unit, onMessage: (String) -> Unit, onWhatsApp: (String) -> Unit,
     onSettings: () -> Unit,
@@ -60,8 +62,13 @@ fun DialerHome(
     onPhoto: (String) -> Unit, onRemovePhoto: (String) -> Unit,
     onAutoRecording: (String, Boolean, (Boolean) -> Unit) -> Unit
 ) {
-    val labels = listOf(stringResource(R.string.expressive_recents), stringResource(R.string.expressive_favorites),
-        stringResource(R.string.expressive_contacts), stringResource(R.string.expressive_voicemail))
+    val labels = listOf(
+        stringResource(R.string.expressive_recents),
+        stringResource(R.string.expressive_speed_dial),
+        stringResource(R.string.expressive_favorites),
+        stringResource(R.string.expressive_contacts),
+        stringResource(R.string.expressive_voicemail)
+    )
     var person by remember { mutableStateOf<Person?>(null) }
     var recent by remember { mutableStateOf<RecentCallGroup?>(null) }
     var delete by remember { mutableStateOf<RecentCallGroup?>(null) }
@@ -127,7 +134,7 @@ fun DialerHome(
                 }
                 FilledTonalIconButton(onClick = onSettings) { Symbol(DialerSymbol.Settings, stringResource(R.string.expressive_settings)) }
             }
-            if (tab != 3) {
+            if (tab != 1 && tab != 4) {
                 TextField(query, onQuery, Modifier.fillMaxWidth().padding(horizontal = 20.dp).heightIn(min = 60.dp),
                     textStyle = MaterialTheme.typography.bodyLarge,
                     placeholder = { Text(stringResource(R.string.expressive_search)) },
@@ -144,20 +151,28 @@ fun DialerHome(
                     (fadeOut(tween(100)) + slideOutHorizontally { if (targetState > initialState) -it / 8 else it / 8 })
             }, label = "page") { page ->
                 val contacts = remember(data.people, query, page) {
-                    searchPeople(if (page == 1) data.people.filter { it.starred } else data.people, query)
+                    searchPeople(if (page == 2) data.people.filter { it.starred } else data.people, query)
                 }
-                val displayedContacts = if (page == 1) contacts.distinctBy { it.id } else contacts
+                val displayedContacts = if (page == 2) contacts.distinctBy { it.id } else contacts
                 val contactNameGroups = remember(contacts, page, groupContactsByName) {
-                    if (page == 2 && groupContactsByName) groupContactsByDisplayName(contacts) else emptyList()
+                    if (page == 3 && groupContactsByName) groupContactsByDisplayName(contacts) else emptyList()
                 }
                 when {
                     loading -> ExpressiveLoading(stringResource(R.string.expressive_loading))
                     error -> EmptyDialerState(DialerSymbol.History, stringResource(R.string.expressive_load_failed),
                         stringResource(R.string.expressive_try_again), stringResource(R.string.expressive_retry), onRetry)
-                    page == 3 -> VoicemailScreen(onVoicemail, onSettings, bottomInset = bottomClearance)
-                    page == 0 && !data.callsAllowed || page in 1..2 && !data.contactsAllowed ->
+                    page == 4 -> VoicemailScreen(onVoicemail, onSettings, bottomInset = bottomClearance)
+                    page == 0 && !data.callsAllowed || page in 2..3 && !data.contactsAllowed ->
                         EmptyDialerState(DialerSymbol.People, stringResource(R.string.expressive_permission_title),
                             stringResource(R.string.expressive_permission_body), stringResource(R.string.expressive_continue), onPermissions)
+                    page == 1 -> SpeedDialScreen(
+                        entries = speedDial,
+                        people = data.people,
+                        contactsAllowed = data.contactsAllowed,
+                        onAssign = onAssignSpeedDial,
+                        onRemove = onRemoveSpeedDial,
+                        onCall = onCall
+                    )
                     else -> LazyColumn(Modifier.fillMaxSize().then(
                         keyboardScrollConnection?.let { Modifier.nestedScroll(it) } ?: Modifier
                     ), contentPadding = PaddingValues(
@@ -204,21 +219,21 @@ fun DialerHome(
                                 }
                             }
                         } else {
-                            if (page == 2) item {
+                            if (page == 3) item {
                                 TextButton(onClick = { onAddContact("") }) {
                                     Symbol(DialerSymbol.Add); Text(stringResource(R.string.expressive_create_contact), Modifier.padding(start = 12.dp))
                                 }
                             }
-                            if (page == 2 && query.isBlank()) item {
+                            if (page == 3 && query.isBlank()) item {
                                 Text(stringResource(R.string.expressive_photo_hint), Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (displayedContacts.isEmpty()) item {
-                                EmptyDialerState(if (page == 1) DialerSymbol.Star else DialerSymbol.People,
-                                    stringResource(if (page == 1) R.string.expressive_no_favorites else R.string.expressive_no_contacts),
-                                    stringResource(if (query.isNotBlank()) R.string.expressive_no_results else if (page == 1) R.string.expressive_favorites_body else R.string.expressive_contacts_body))
+                                EmptyDialerState(if (page == 2) DialerSymbol.Star else DialerSymbol.People,
+                                    stringResource(if (page == 2) R.string.expressive_no_favorites else R.string.expressive_no_contacts),
+                                    stringResource(if (query.isNotBlank()) R.string.expressive_no_results else if (page == 2) R.string.expressive_favorites_body else R.string.expressive_contacts_body))
                             }
-                            if (page == 1) {
+                            if (page == 2) {
                                 items(displayedContacts.chunked(2), key = { row -> "favorite_${row.first().id}" }) { row ->
                                     Row(Modifier.fillMaxWidth().animateItem().padding(vertical = 4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -243,7 +258,7 @@ fun DialerHome(
                                         if (row.size == 1) Spacer(Modifier.weight(1f))
                                     }
                                 }
-                            } else if (page == 2 && groupContactsByName) {
+                            } else if (page == 3 && groupContactsByName) {
                                 itemsIndexed(contactNameGroups, key = { index, group ->
                                     if (group.name.isNotBlank()) "contact_name:${group.name}" else "unnamed_contact:$index"
                                 }) { index, group ->
@@ -285,9 +300,9 @@ fun DialerHome(
             }
         }
     }
-    if (keypad) DialpadSheet(data.people, digits, bottomDialpadBackspace,
+    if (keypad) DialpadSheet(data.people, speedDial, digits, bottomDialpadBackspace,
         onDismiss = { onKeypad(false) }, onDigits = onDigits, onCall = onCall,
-        onVoicemail = onVoicemail, onAddContact = onAddContact)
+        onVoicemail = onVoicemail, onAddContact = onAddContact, onSpeedDial = onSpeedDial)
     person?.let { selected ->
         val updated = data.people.firstOrNull { it.id == selected.id && it.number == selected.number } ?: selected
         NumberActionsDialog(updated.name, updated.number, updated.starred, true,

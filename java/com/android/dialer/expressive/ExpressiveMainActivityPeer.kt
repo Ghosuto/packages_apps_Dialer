@@ -47,6 +47,7 @@ import kotlinx.coroutines.*
 
 class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActivityPeer {
     private val repository = DialerRepository(activity)
+    private val speedDialStore = SpeedDialStore(activity)
     private var data by mutableStateOf(DialerData())
     private var loading by mutableStateOf(true)
     private var error by mutableStateOf(false)
@@ -58,6 +59,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
     private var hideKeyboardOnScroll by mutableStateOf(true)
     private var groupContactsByName by mutableStateOf(true)
     private var bottomDialpadBackspace by mutableStateOf(true)
+    private var speedDial by mutableStateOf<Map<Int, SpeedDialEntry>>(emptyMap())
     private var job: Job? = null
     private var observing = false
     private var photoNumber: String? = null
@@ -91,11 +93,12 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         activity.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         if (saveInstanceState != null) {
             photoNumber = saveInstanceState.getString("expressive.photo_number")
-            tab = saveInstanceState.getInt("expressive.tab").coerceIn(0, 3)
+            tab = saveInstanceState.getInt("expressive.tab").coerceIn(0, 4)
             query = saveInstanceState.getString("expressive.query", "")
             digits = saveInstanceState.getString("expressive.digits", "")
             keypad = saveInstanceState.getBoolean("expressive.keypad")
         } else onNewIntent(activity.intent)
+        speedDial = speedDialStore.load()
         activity.setContentView(ComposeView(activity).apply {
             id = R.id.expressive_main
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
@@ -113,6 +116,27 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
                             Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_PHONE_STATE,
                             Manifest.permission.CALL_PHONE, Manifest.permission.POST_NOTIFICATIONS)) },
                         onRetry = { refresh() }, onStar = { person -> write(Manifest.permission.WRITE_CONTACTS) { repository.setStarred(person) } },
+                        speedDial = speedDial,
+                        onAssignSpeedDial = { key, entry ->
+                            speedDialStore.assign(key, entry)
+                            speedDial = speedDialStore.load()
+                        },
+                        onRemoveSpeedDial = { key ->
+                            speedDialStore.remove(key)
+                            speedDial = speedDialStore.load()
+                        },
+                        onSpeedDial = { key ->
+                            val entry = speedDial[key]
+                            if (entry == null) {
+                                Toast.makeText(
+                                    activity,
+                                    activity.getString(R.string.expressive_speed_dial_unassigned_key, key),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                call(entry.number)
+                            }
+                        },
                         onDelete = { calls, completed -> write(Manifest.permission.WRITE_CALL_LOG, completed) { repository.deleteCalls(calls) } },
                         onAddContact = { number -> launch(Intent(Intent.ACTION_INSERT_OR_EDIT).apply {
                             type = ContactsContract.Contacts.CONTENT_ITEM_TYPE
@@ -206,6 +230,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         }
     }
     override fun onActivityResume() {
+        speedDial = speedDialStore.load()
         compactFloatingBar = PreferenceManager.getDefaultSharedPreferences(activity)
             .getBoolean("compact_floating_bar", false)
         hideKeyboardOnScroll = PreferenceManager.getDefaultSharedPreferences(activity)
@@ -228,11 +253,11 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
     override fun onActivityStop() { job?.cancel() }
     override fun onUserLeaveHint() {}
     override fun onNewIntent(intent: Intent) {
-        if (intent.type == Calls.CONTENT_TYPE) tab = if (intent.getIntExtra(Calls.EXTRA_CALL_TYPE_FILTER, 0) == Calls.VOICEMAIL_TYPE) 3 else 0
+        if (intent.type == Calls.CONTENT_TYPE) tab = if (intent.getIntExtra(Calls.EXTRA_CALL_TYPE_FILTER, 0) == Calls.VOICEMAIL_TYPE) 4 else 0
         if (intent.hasExtra("EXTRA_SHOW_TAB")) tab = when (intent.getIntExtra("EXTRA_SHOW_TAB", 0)) {
-            0 -> 1; 1 -> 0; 2 -> 2; 3 -> 3; else -> 0
+            0 -> 1; 1 -> 0; 2 -> 3; 3 -> 4; else -> 0
         }
-        if (intent.data?.scheme == "voicemail") { tab = 3; return }
+        if (intent.data?.scheme == "voicemail") { tab = 4; return }
         if (intent.action == Intent.ACTION_DIAL || intent.data?.scheme == "tel" || intent.getBooleanExtra("add_call_mode", false)) {
             keypad = true
             activity.lifecycleScope.launch {
