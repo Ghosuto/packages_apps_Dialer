@@ -50,7 +50,7 @@ internal fun DialpadSheet(
     onDismiss: () -> Unit, onDigits: (String) -> String, onCall: (String) -> Unit,
     onVoicemail: () -> Unit, onAddContact: (String) -> Unit, onSpeedDial: (Int) -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss,
+    DialerModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         val keyboard = LocalSoftwareKeyboardController.current
         LaunchedEffect(Unit) { keyboard?.hide() }

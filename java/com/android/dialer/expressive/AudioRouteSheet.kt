@@ -36,7 +36,7 @@ internal fun AudioRouteSheet(state: CallAudioState, onDismiss: () -> Unit, onSel
         Triple(CallAudioState.ROUTE_BLUETOOTH, DialerSymbol.Bluetooth, R.string.expressive_bluetooth),
         Triple(CallAudioState.ROUTE_SPEAKER, DialerSymbol.Speaker, R.string.expressive_speaker)
     )
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    DialerModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.expressive_choose_audio), Modifier.padding(bottom = 12.dp),

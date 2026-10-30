@@ -178,7 +178,7 @@ internal fun NumberCallRecordings(
         finally { loading = false }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss,
+    DialerModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.9f)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {

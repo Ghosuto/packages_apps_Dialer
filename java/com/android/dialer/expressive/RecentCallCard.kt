@@ -212,8 +212,7 @@ internal fun NumberCallHistory(selected: RecentCall, calls: List<RecentCall>,
     onDismiss: () -> Unit, onRecordings: () -> Unit) {
     val context = LocalContext.current
     val history = remember(calls, selected.numberKey) { calls.filter { selected.isSameNumber(it) } }
-    ModalBottomSheet(onDismissRequest = onDismiss,
-        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
+    DialerModalBottomSheet(onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(.85f)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {

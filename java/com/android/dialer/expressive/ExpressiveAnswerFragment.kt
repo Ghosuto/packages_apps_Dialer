@@ -146,7 +146,7 @@ class ExpressiveAnswerFragment : ExpressiveCallFragment(), AnswerScreen {
         }
         if (takingAction) Text(stringResource(R.string.expressive_connecting), Modifier.padding(8.dp)
             .semantics { liveRegion = LiveRegionMode.Polite })
-        if (showResponses) ModalBottomSheet(onDismissRequest = { showResponses = false }) {
+        if (showResponses) DialerModalBottomSheet(onDismissRequest = { showResponses = false }) {
             responses.forEach { response ->
                 TextButton(onClick = { rejectWithResponse(response) }, enabled = answerScreenReady && !takingAction && hasIncomingCall(),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) { Text(response) }
