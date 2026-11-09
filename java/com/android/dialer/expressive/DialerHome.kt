@@ -50,6 +50,7 @@ fun DialerHome(
     data: DialerData, loading: Boolean, error: Boolean, tab: Int, query: String, digits: String,
     keypad: Boolean, compactFloatingBar: Boolean = false, hideKeyboardOnScroll: Boolean = true,
     groupContactsByName: Boolean = true, bottomDialpadBackspace: Boolean = true,
+    hiddenNavItems: Set<String> = emptySet(),
     onTab: (Int) -> Unit, onQuery: (String) -> Unit, onDigits: (String) -> String,
     onKeypad: (Boolean) -> Unit, onCall: (String) -> Unit, onVideo: (String) -> Unit, onVoicemail: () -> Unit,
     onPermissions: () -> Unit, onRetry: () -> Unit, onStar: (Person) -> Unit,
@@ -96,7 +97,7 @@ fun DialerHome(
         contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
             Box(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 12.dp), Alignment.Center) {
-                FloatingDialerBar(tab, labels, onTab, compactFloatingBar)
+                FloatingDialerBar(tab, labels, onTab, compactFloatingBar, hiddenNavItems)
             }
         }, floatingActionButton = {
             ExpressiveTile(onClick = { onKeypad(true) }, modifier = Modifier.size(64.dp),
@@ -126,7 +127,7 @@ fun DialerHome(
                 Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.expressive_phone), style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    AnimatedContent(labels[tab], label = "page title") {
+                    AnimatedContent(labels.getOrElse(tab) { "" }, label = "page title") {
                         Text(it, Modifier.semantics { heading() },
                             style = MaterialTheme.typography.displaySmallEmphasized,
                             color = MaterialTheme.colorScheme.primary)

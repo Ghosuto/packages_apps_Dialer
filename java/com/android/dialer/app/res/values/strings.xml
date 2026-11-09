@@ -471,6 +471,9 @@
   <string name="call_history_import_failed">Could not import call history</string>
   <string name="compact_floating_bar_title">Compact floating navigation bar</string>
   <string name="compact_floating_bar_summary">Show only icons in the floating navigation bar</string>
+  <string name="hidden_nav_items_title">Hide navigation bar icons</string>
+  <string name="hidden_nav_items_summary">Choose up to 2 icons to hide from the navigation bar</string>
+  <string name="hidden_nav_items_max_limit_toast">You can hide at most 2 icons</string>
   <string name="hide_keyboard_on_scroll_title">Hide keyboard when scrolling</string>
   <string name="hide_keyboard_on_scroll_summary">Automatically hide the search keyboard when browsing results</string>
   <string name="group_contacts_by_name_title">Group contacts by name</string>

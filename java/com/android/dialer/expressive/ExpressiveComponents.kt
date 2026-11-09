@@ -162,20 +162,29 @@ fun ExpressiveTile(
     }
 }
 
+data class DialerNavItem(
+    val index: Int,
+    val key: String,
+    val label: String,
+    val icon: DialerSymbol
+)
+
 @Composable
 fun FloatingDialerBar(
     selected: Int,
     labels: List<String>,
     onSelect: (Int) -> Unit,
-    compact: Boolean = false
+    compact: Boolean = false,
+    hiddenItems: Set<String> = emptySet()
 ) {
-    val icons = listOf(
-        DialerSymbol.History,
-        DialerSymbol.Keypad,
-        DialerSymbol.Star,
-        DialerSymbol.People,
-        DialerSymbol.Voicemail
+    val items = listOf(
+        DialerNavItem(0, "recents", labels.getOrElse(0) { "" }, DialerSymbol.History),
+        DialerNavItem(1, "speed_dial", labels.getOrElse(1) { "" }, DialerSymbol.Keypad),
+        DialerNavItem(2, "favorites", labels.getOrElse(2) { "" }, DialerSymbol.Star),
+        DialerNavItem(3, "contacts", labels.getOrElse(3) { "" }, DialerSymbol.People),
+        DialerNavItem(4, "voicemail", labels.getOrElse(4) { "" }, DialerSymbol.Voicemail)
     )
+    val visibleItems = items.filter { it.key !in hiddenItems && it.index.toString() !in hiddenItems }
     val haptic = LocalHapticFeedback.current
     Surface(shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shadowElevation = 0.dp, tonalElevation = 2.dp,
@@ -183,8 +192,8 @@ fun FloatingDialerBar(
             .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())) {
         Row(Modifier.padding(6.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            labels.forEachIndexed { index, label ->
-                val active = selected == index
+            visibleItems.forEach { navItem ->
+                val active = selected == navItem.index
                 val interaction = remember { MutableInteractionSource() }
                 val pressed by interaction.collectIsPressedAsState()
                 val scale by animateFloatAsState(if (pressed) .94f else 1f,
@@ -199,16 +208,16 @@ fun FloatingDialerBar(
                     .clip(RoundedCornerShape(radius)).background(color)
                     .selectable(active, interactionSource = interaction, indication = LocalIndication.current,
                         role = Role.Tab, onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSelect(index)
-                        }).semantics { contentDescription = label }.padding(horizontal = 8.dp, vertical = 14.dp),
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSelect(navItem.index)
+                        }).semantics { contentDescription = navItem.label }.padding(horizontal = 8.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     CompositionLocalProvider(LocalContentColor provides if (active) MaterialTheme.colorScheme.onPrimaryContainer
                         else MaterialTheme.colorScheme.onSurfaceVariant) {
-                        Symbol(icons[index], modifier = Modifier.size(22.dp))
+                        Symbol(navItem.icon, modifier = Modifier.size(22.dp))
                         AnimatedVisibility(!compact && active,
                             enter = fadeIn() + expandHorizontally(MaterialTheme.motionScheme.defaultSpatialSpec()),
                             exit = fadeOut() + shrinkHorizontally()) {
-                            Text(label, Modifier.padding(start = 6.dp).clearAndSetSemantics {}, maxLines = 1,
+                            Text(navItem.label, Modifier.padding(start = 6.dp).clearAndSetSemantics {}, maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.labelLargeEmphasized)
                         }

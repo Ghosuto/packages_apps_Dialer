@@ -83,6 +83,15 @@
       android:defaultValue="false"
       app:iconSpaceReserved="false"/>
 
+  <MultiSelectListPreference
+      android:key="hidden_nav_items"
+      android:title="@string/hidden_nav_items_title"
+      android:dialogTitle="@string/hidden_nav_items_title"
+      android:summary="@string/hidden_nav_items_summary"
+      android:entries="@array/nav_item_entries"
+      android:entryValues="@array/nav_item_values"
+      app:iconSpaceReserved="false"/>
+
   <SwitchPreferenceCompat
       android:key="bottom_dialpad_backspace"
       android:title="@string/expressive_bottom_dialpad_backspace"

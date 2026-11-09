@@ -59,6 +59,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
     private var hideKeyboardOnScroll by mutableStateOf(true)
     private var groupContactsByName by mutableStateOf(true)
     private var bottomDialpadBackspace by mutableStateOf(true)
+    private var hiddenNavItems by mutableStateOf<Set<String>>(emptySet())
     private var speedDial by mutableStateOf<Map<Int, SpeedDialEntry>>(emptyMap())
     private var job: Job? = null
     private var observing = false
@@ -91,6 +92,8 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         activity.supportActionBar?.hide()
         WindowCompat.setDecorFitsSystemWindows(activity.window, false)
         activity.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        hiddenNavItems = PreferenceManager.getDefaultSharedPreferences(activity)
+            .getStringSet("hidden_nav_items", emptySet()) ?: emptySet()
         if (saveInstanceState != null) {
             photoNumber = saveInstanceState.getString("expressive.photo_number")
             tab = saveInstanceState.getInt("expressive.tab").coerceIn(0, 4)
@@ -98,6 +101,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
             digits = saveInstanceState.getString("expressive.digits", "")
             keypad = saveInstanceState.getBoolean("expressive.keypad")
         } else onNewIntent(activity.intent)
+        if (isTabHidden(tab)) tab = defaultTab()
         speedDial = speedDialStore.load()
         activity.setContentView(ComposeView(activity).apply {
             id = R.id.expressive_main
@@ -109,6 +113,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
                         hideKeyboardOnScroll = hideKeyboardOnScroll,
                         groupContactsByName = groupContactsByName,
                         bottomDialpadBackspace = bottomDialpadBackspace,
+                        hiddenNavItems = hiddenNavItems,
                         onTab = { tab = it; query = "" }, onQuery = { query = it },
                         onDigits = { updateDigits(it) }, onKeypad = { keypad = it },
                         onCall = { call(it) }, onVideo = { call(it, true) }, onVoicemail = { voicemail() },
@@ -233,6 +238,9 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         speedDial = speedDialStore.load()
         compactFloatingBar = PreferenceManager.getDefaultSharedPreferences(activity)
             .getBoolean("compact_floating_bar", false)
+        hiddenNavItems = PreferenceManager.getDefaultSharedPreferences(activity)
+            .getStringSet("hidden_nav_items", emptySet()) ?: emptySet()
+        if (isTabHidden(tab)) tab = defaultTab()
         hideKeyboardOnScroll = PreferenceManager.getDefaultSharedPreferences(activity)
             .getBoolean("hide_keyboard_on_scroll", true)
         groupContactsByName = PreferenceManager.getDefaultSharedPreferences(activity)
@@ -277,10 +285,27 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         bundle.putInt("expressive.tab", tab); bundle.putString("expressive.query", query)
         bundle.putString("expressive.digits", digits); bundle.putBoolean("expressive.keypad", keypad)
     }
+    private fun isTabHidden(index: Int): Boolean {
+        val key = when (index) {
+            0 -> "recents"
+            1 -> "speed_dial"
+            2 -> "favorites"
+            3 -> "contacts"
+            4 -> "voicemail"
+            else -> ""
+        }
+        return key in hiddenNavItems || index.toString() in hiddenNavItems
+    }
+    private fun defaultTab(): Int {
+        for (i in 0..4) {
+            if (!isTabHidden(i)) return i
+        }
+        return 0
+    }
     override fun onBackPressed(): Boolean = when {
         keypad -> { keypad = false; true }
         query.isNotEmpty() -> { query = ""; true }
-        tab != 0 -> { tab = 0; true }
+        tab != defaultTab() -> { tab = defaultTab(); true }
         else -> false
     }
 }

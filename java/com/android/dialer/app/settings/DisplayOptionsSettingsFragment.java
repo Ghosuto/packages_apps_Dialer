@@ -19,20 +19,27 @@ package com.android.dialer.app.settings;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 import androidx.preference.ListPreference;
+import androidx.preference.MultiSelectListPreference;
 import androidx.preference.PreferenceManager;
 
 import com.android.dialer.R;
 import com.android.dialer.expressive.CallerScreenStylePreferences;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 public class DisplayOptionsSettingsFragment extends com.android.dialer.expressive.ExpressivePreferenceFragment
     implements Preference.OnPreferenceChangeListener {
 
   private SharedPreferences mPrefs;
   private ListPreference mCallerScreenStyle;
+  private MultiSelectListPreference mHiddenNavItems;
 
   @Override
   public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
@@ -53,12 +60,53 @@ public class DisplayOptionsSettingsFragment extends com.android.dialer.expressiv
       mCallerScreenStyle.setOnPreferenceChangeListener(this);
     }
 
+    Preference hiddenNavPref = findPreference("hidden_nav_items");
+    if (hiddenNavPref instanceof MultiSelectListPreference) {
+      mHiddenNavItems = (MultiSelectListPreference) hiddenNavPref;
+      updateHiddenNavItemsSummary(mHiddenNavItems.getValues());
+      mHiddenNavItems.setOnPreferenceChangeListener(this);
+    }
+  }
+
+  private void updateHiddenNavItemsSummary(Set<String> values) {
+    if (mHiddenNavItems == null) {
+      return;
+    }
+    if (values == null || values.isEmpty()) {
+      mHiddenNavItems.setSummary(R.string.hidden_nav_items_summary);
+      return;
+    }
+    List<String> labels = new ArrayList<>();
+    CharSequence[] entries = mHiddenNavItems.getEntries();
+    CharSequence[] entryValues = mHiddenNavItems.getEntryValues();
+    if (entries != null && entryValues != null) {
+      for (int i = 0; i < entryValues.length; i++) {
+        if (values.contains(entryValues[i].toString())) {
+          labels.add(entries[i].toString());
+        }
+      }
+    }
+    if (labels.isEmpty()) {
+      mHiddenNavItems.setSummary(R.string.hidden_nav_items_summary);
+    } else {
+      mHiddenNavItems.setSummary(String.join(", ", labels));
+    }
   }
 
   @Override
   public boolean onPreferenceChange(Preference preference, Object objValue) {
     if (preference == mCallerScreenStyle && objValue instanceof String) {
       return mCallerScreenStyle.findIndexOfValue((String) objValue) >= 0;
+    }
+    if (preference == mHiddenNavItems && objValue instanceof Set) {
+      @SuppressWarnings("unchecked")
+      Set<String> selected = (Set<String>) objValue;
+      if (selected.size() > 2) {
+        Toast.makeText(requireContext(), R.string.hidden_nav_items_max_limit_toast, Toast.LENGTH_SHORT).show();
+        return false;
+      }
+      updateHiddenNavItemsSummary(selected);
+      return true;
     }
     return false;
   }

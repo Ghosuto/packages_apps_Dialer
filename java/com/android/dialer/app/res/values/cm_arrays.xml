@@ -38,4 +38,20 @@
         <item>hyperos</item>
     </string-array>
 
+    <string-array name="nav_item_entries">
+        <item>@string/expressive_recents</item>
+        <item>@string/expressive_speed_dial</item>
+        <item>@string/expressive_favorites</item>
+        <item>@string/expressive_contacts</item>
+        <item>@string/expressive_voicemail</item>
+    </string-array>
+
+    <string-array name="nav_item_values" translatable="false">
+        <item>recents</item>
+        <item>speed_dial</item>
+        <item>favorites</item>
+        <item>contacts</item>
+        <item>voicemail</item>
+    </string-array>
+
 </resources>
