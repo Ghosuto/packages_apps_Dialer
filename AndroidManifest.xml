@@ -94,6 +94,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT" />
+    <uses-permission android:name="android.permission.CAPTURE_VOICE_COMMUNICATION_OUTPUT" />
+    <uses-permission android:name="android.permission.BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_ROUTING" />
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
@@ -114,6 +117,12 @@
 
     <!-- Used to discover installed text-to-speech services for caller announcements. -->
     <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="com.google.android.apps.tachyon" />
+        <package android:name="com.google.android.apps.meetings" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="org.telegram.messenger.web" />
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
@@ -146,6 +155,33 @@
         <service
             android:name="com.android.dialer.callrecord.impl.CallRecorderService"
             android:process="com.android.incallui" />
+
+        <service
+            android:name="com.android.dialer.voip.VoipNotificationListener"
+            android:label="@string/voip_calls_title"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name="com.android.dialer.voip.VoipRecordingService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <activity
+            android:name="com.android.dialer.voip.VoipCallActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Dialer.ThemeBase.NoActionBar" />
+
+        <activity
+            android:name="com.android.dialer.voip.VoipRecordingsActivity"
+            android:exported="false"
+            android:label="@string/voip_recordings_title"
+            android:theme="@style/Dialer.ThemeBase.NoActionBar" />
 
         <activity
             android:name="com.android.contacts.common.dialog.CallSubjectDialog"

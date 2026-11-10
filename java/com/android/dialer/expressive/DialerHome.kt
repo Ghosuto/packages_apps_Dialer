@@ -19,6 +19,9 @@
 package com.android.dialer.expressive
 
 import android.provider.CallLog.Calls
+import android.content.Intent
+import com.android.dialer.voip.rememberVoipContactOpener
+import com.android.dialer.voip.VoipRecordingsActivity
 import android.telephony.PhoneNumberUtils
 import android.text.format.DateUtils
 import androidx.compose.animation.*
@@ -33,6 +36,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -63,6 +67,8 @@ fun DialerHome(
     onPhoto: (String) -> Unit, onRemovePhoto: (String) -> Unit,
     onAutoRecording: (String, Boolean, (Boolean) -> Unit) -> Unit
 ) {
+    val context = LocalContext.current
+    val openVoipContact = rememberVoipContactOpener()
     val labels = listOf(
         stringResource(R.string.expressive_recents),
         stringResource(R.string.expressive_speed_dial),
@@ -87,7 +93,8 @@ fun DialerHome(
     var missedOnly by rememberSaveable { mutableStateOf(false) }
     val groups = remember(data.recentGroups, query, missedOnly) {
         data.recentGroups.filter { group ->
-            group.calls.any { (!missedOnly || it.type == Calls.MISSED_TYPE) && matches(it.name, it.number, query) }
+            group.calls.any { (!missedOnly || it.type == Calls.MISSED_TYPE) &&
+                matches(it.name + " " + it.voipAppName.orEmpty(), it.number, query) }
         }
     }
     val recentContactMatches = remember(data.people, data.contactsAllowed, query, missedOnly) {
@@ -163,7 +170,8 @@ fun DialerHome(
                     error -> EmptyDialerState(DialerSymbol.History, stringResource(R.string.expressive_load_failed),
                         stringResource(R.string.expressive_try_again), stringResource(R.string.expressive_retry), onRetry)
                     page == 4 -> VoicemailScreen(onVoicemail, onSettings, bottomInset = bottomClearance)
-                    page == 0 && !data.callsAllowed || page in 2..3 && !data.contactsAllowed ->
+                    page == 0 && !data.callsAllowed && data.calls.none { it.voipPackage != null } ||
+                        page in 2..3 && !data.contactsAllowed ->
                         EmptyDialerState(DialerSymbol.People, stringResource(R.string.expressive_permission_title),
                             stringResource(R.string.expressive_permission_body), stringResource(R.string.expressive_continue), onPermissions)
                     page == 1 -> SpeedDialScreen(
@@ -205,8 +213,15 @@ fun DialerHome(
                                     RecentCallCard(group, expanded = expandedGroup == group.id,
                                         onExpand = { expandedGroup = if (expandedGroup == group.id) null else group.id },
                                         onActions = { recent = group }, onHistory = { history = call },
-                                        onRecordings = { showRecordings(call.name.ifBlank { call.number }, call.number) },
-                                        onCall = { onCall(call.number) }, onRequestDelete = { delete = group },
+                                        onRecordings = {
+                                            if (call.voipPackage != null) context.startActivity(
+                                                Intent(context, VoipRecordingsActivity::class.java))
+                                            else showRecordings(call.name.ifBlank { call.number }, call.number)
+                                        },
+                                        onCall = {
+                                            if (call.voipPackage != null) openVoipContact(call)
+                                            else onCall(call.number)
+                                        }, onRequestDelete = { delete = group },
                                         onDelete = { completed -> onDelete(group.calls, completed) },
                                         shape = dialerGroupedShape(first, last),
                                         modifier = Modifier.animateItem(placementSpec = null))
@@ -375,7 +390,7 @@ internal fun RecentCall.displayName(): String = when (presentation) {
     else -> name.ifBlank { number.ifBlank { stringResource(R.string.expressive_unknown) } }
 }
 @Composable
-internal fun RecentCall.typeLabel(): String = stringResource(when (type) {
+internal fun RecentCall.typeLabel(): String = stringResource(if (voipPackage != null) R.string.voip_app_call else when (type) {
     Calls.OUTGOING_TYPE -> R.string.expressive_outgoing
     Calls.MISSED_TYPE -> R.string.expressive_missed
     Calls.REJECTED_TYPE -> R.string.expressive_declined

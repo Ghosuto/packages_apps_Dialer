@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.dialer.R
 import com.android.dialer.spam.CarrierCallIdentity
+import com.android.dialer.voip.VoipContacts
 import kotlin.math.abs
 
 @Composable
@@ -139,7 +140,9 @@ internal fun RecentCallCard(
                             color = colors.onSurfaceVariant)
                         Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically) {
-                            CallSimLabel(call.simNumber)
+                            if (call.voipAppName != null) Text(call.voipAppName,
+                                style = MaterialTheme.typography.labelSmall, color = colors.primary)
+                            else CallSimLabel(call.simNumber)
                             if (group.calls.size > 1) Text(stringResource(R.string.expressive_call_count, group.calls.size),
                                 Modifier.weight(1f), style = MaterialTheme.typography.labelSmall,
                                 color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -150,6 +153,12 @@ internal fun RecentCallCard(
                     })
                     if (call.callable) IconButton(onClick = onCall, enabled = !deleting) {
                         Symbol(DialerSymbol.Phone, stringResource(R.string.expressive_call_person, name))
+                    }
+                    else if (call.voipPackage != null) IconButton(onClick = onCall, enabled = !deleting) {
+                        if (VoipContacts.supportsContact(call.voipPackage)) {
+                            Symbol(DialerSymbol.Message, stringResource(R.string.voip_open_contact,
+                                name, call.voipAppName.orEmpty()))
+                        } else Symbol(DialerSymbol.Video, stringResource(R.string.voip_open_app, call.voipAppName.orEmpty()))
                     }
                 }
                 AnimatedVisibility(expanded,
@@ -165,7 +174,7 @@ internal fun RecentCallCard(
                             Symbol(DialerSymbol.History)
                             Text(stringResource(R.string.expressive_full_history), Modifier.padding(start = 8.dp))
                         }
-                        if (call.callable) TextButton(onClick = onRecordings, enabled = !deleting,
+                        if (call.callable || call.voipPackage != null) TextButton(onClick = onRecordings, enabled = !deleting,
                             modifier = Modifier.fillMaxWidth()) {
                             Symbol(DialerSymbol.Record)
                             Text(stringResource(R.string.expressive_call_recordings), Modifier.padding(start = 8.dp))
@@ -187,7 +196,9 @@ private fun RecentCallDetail(call: RecentCall, showDate: Boolean) {
                 color = if (call.type == Calls.MISSED_TYPE) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
             Text(DateUtils.formatDateTime(LocalContext.current, call.date, flags),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            CallSimLabel(call.simNumber, Modifier.padding(top = 4.dp))
+            if (call.voipAppName != null) Text(call.voipAppName,
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            else CallSimLabel(call.simNumber, Modifier.padding(top = 4.dp))
         }
         if (call.duration > 0) Text(DateUtils.formatElapsedTime(call.duration),
             Modifier.padding(start = 12.dp), style = MaterialTheme.typography.labelMedium)

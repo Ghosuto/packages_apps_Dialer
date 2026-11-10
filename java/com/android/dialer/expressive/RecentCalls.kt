@@ -24,8 +24,10 @@ data class RecentCall(val id: Long, val name: String, val number: String, val da
     val duration: Long, val type: Int, val presentation: Int, val numberKey: String = number,
     val simNumber: Int? = null,
     val spamStatus: Int = CarrierCallIdentity.SPAM_UNKNOWN,
-    val verificationStatus: Int = CarrierCallIdentity.VERIFICATION_UNKNOWN) {
-    val callable: Boolean get() = presentation == Calls.PRESENTATION_ALLOWED && number.isNotBlank()
+    val verificationStatus: Int = CarrierCallIdentity.VERIFICATION_UNKNOWN,
+    val voipPackage: String? = null, val voipAppName: String? = null,
+    val voipContactUri: String? = null) {
+    val callable: Boolean get() = voipPackage == null && presentation == Calls.PRESENTATION_ALLOWED && number.isNotBlank()
 }
 
 data class RecentCallGroup(val calls: List<RecentCall>) {

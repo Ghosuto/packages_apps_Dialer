@@ -31,6 +31,7 @@ import android.telephony.TelephonyManager
 import androidx.core.content.ContextCompat
 import com.android.dialer.telecom.TelecomUtil
 import com.android.dialer.spam.CarrierCallIdentityStore
+import com.android.dialer.voip.VoipCallHistory
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -89,6 +90,8 @@ class DialerRepository(private val context: Context) {
                     identity.getSpamStatus(), identity.getVerificationStatus())
             }
         }
+        calls += VoipCallHistory.load(context)
+        calls.sortByDescending { it.date }
         DialerData(people.distinctBy { it.id to it.number }, calls, contactsAllowed, callsAllowed)
     }
     private fun resolveSimNumber(account: PhoneAccountHandle): Int? {
@@ -109,7 +112,8 @@ class DialerRepository(private val context: Context) {
             ContentValues().apply { put(ContactsContract.Contacts.STARRED, if (person.starred) 0 else 1) }, null, null)
     }
     suspend fun deleteCalls(calls: List<RecentCall>) = withContext(Dispatchers.IO) {
-        calls.map { it.id }.distinct().chunked(200).forEach { ids ->
+        if (calls.any { it.voipPackage != null }) VoipCallHistory.delete(context, calls)
+        calls.filter { it.voipPackage == null }.map { it.id }.distinct().chunked(200).forEach { ids ->
             context.contentResolver.delete(Calls.CONTENT_URI,
                 "${Calls._ID} IN (${ids.joinToString(",") { "?" }})", ids.map { it.toString() }.toTypedArray())
         }

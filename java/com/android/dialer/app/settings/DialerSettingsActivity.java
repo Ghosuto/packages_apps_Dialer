@@ -181,6 +181,13 @@ public class DialerSettingsActivity extends BaseActivity implements
       otherSettings.setIconSpaceReserved(false);
       getPreferenceScreen().addPreference(otherSettings);
 
+      Preference voipSettings = new Preference(getContext());
+      voipSettings.setTitle(R.string.voip_calls_title);
+      voipSettings.setSummary(R.string.voip_calls_summary);
+      voipSettings.setFragment(com.android.dialer.voip.VoipSettingsFragment.class.getName());
+      voipSettings.setIconSpaceReserved(false);
+      getPreferenceScreen().addPreference(voipSettings);
+
       final Preference callHistoryBackup = new Preference(getContext());
       callHistoryBackup.setTitle(R.string.call_history_backup_title);
       callHistoryBackup.setSummary(R.string.call_history_backup_summary);

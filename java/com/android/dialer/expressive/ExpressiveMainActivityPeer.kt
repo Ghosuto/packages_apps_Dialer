@@ -22,6 +22,8 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.*
 import android.provider.CallLog.Calls
+import com.android.dialer.voip.VoipCallHistory
+import kotlinx.coroutines.flow.collect
 import android.provider.ContactsContract
 import android.telecom.TelecomManager
 import android.telephony.PhoneNumberUtils
@@ -84,6 +86,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
             catch (_: Exception) { Toast.makeText(activity, R.string.expressive_photo_failed, Toast.LENGTH_LONG).show() }
         }
     }
+    private var voipHistoryJob: Job? = null
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) { refresh() }
     }
@@ -142,7 +145,10 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
                                 call(entry.number)
                             }
                         },
-                        onDelete = { calls, completed -> write(Manifest.permission.WRITE_CALL_LOG, completed) { repository.deleteCalls(calls) } },
+                        onDelete = { calls, completed ->
+                            if (calls.all { it.voipPackage != null }) mutate({ repository.deleteCalls(calls) }, completed)
+                            else write(Manifest.permission.WRITE_CALL_LOG, completed) { repository.deleteCalls(calls) }
+                        },
                         onAddContact = { number -> launch(Intent(Intent.ACTION_INSERT_OR_EDIT).apply {
                             type = ContactsContract.Contacts.CONTENT_ITEM_TYPE
                             putExtra(ContactsContract.Intents.Insert.PHONE, number)
@@ -247,7 +253,10 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
             .getBoolean("group_contacts_by_name", true)
         bottomDialpadBackspace = PreferenceManager.getDefaultSharedPreferences(activity)
             .getBoolean("bottom_dialpad_backspace", true)
-        refresh()
+        voipHistoryJob?.cancel()
+        voipHistoryJob = activity.lifecycleScope.launch {
+            VoipCallHistory.revision.collect { refresh() }
+        }
         if (!observing) {
             activity.contentResolver.registerContentObserver(Calls.CONTENT_URI, true, observer)
             activity.contentResolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
@@ -255,6 +264,8 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         }
     }
     override fun onActivityPause() {
+        voipHistoryJob?.cancel()
+        voipHistoryJob = null
         if (observing) activity.contentResolver.unregisterContentObserver(observer)
         observing = false
     }

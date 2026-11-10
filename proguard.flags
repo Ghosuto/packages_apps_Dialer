@@ -6,3 +6,7 @@
 -keep public class * extends android.app.Fragment {
   public <init>();
 }
+
+-keep public class com.android.dialer.voip.VoipSettingsFragment {
+  public <init>();
+}

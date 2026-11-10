@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voip_calls_title">Universal VoIP calls</string>
+    <string name="voip_calls_summary">Show calls and available controls from WhatsApp, Google Meet, and Telegram in Dialer, and include app calls in Recents while enabled</string>
+    <string name="voip_notification_access">Notification access</string>
+    <string name="voip_access_granted">Allowed. Dialer can read supported apps’ call notifications.</string>
+    <string name="voip_access_needed">Allow notification access to show app calls in Dialer</string>
+    <string name="voip_notifications">Call notifications</string>
+    <string name="voip_notifications_summary">Manage Dialer notifications and incoming call alerts</string>
+    <string name="voip_notifications_needed">Allow Dialer notifications to show app calls and recording controls</string>
+    <string name="voip_recording_title">VoIP call recording</string>
+    <string name="voip_recording_summary">Record app audio and this device’s microphone when you tap Record. Muting the calling app may not mute the recording.</string>
+    <string name="voip_recording_unavailable">This ROM has not granted the audio permissions needed for VoIP recording</string>
+    <string name="voip_recordings_title">VoIP recordings</string>
+    <string name="voip_recordings_summary">Saved in Recordings/VoIP calls</string>
+    <string name="voip_compatibility_title">App compatibility</string>
+    <string name="voip_compatibility_summary">Available controls depend on the app’s call notifications. Open the app for video, microphone, and audio routing controls. Recording both voices depends on the app and device; some apps block their call audio.</string>
+    <string name="voip_answer">Answer</string>
+    <string name="voip_decline">Decline</string>
+    <string name="voip_hang_up">End call</string>
+    <string name="voip_incoming">Incoming app call</string>
+    <string name="voip_app_call">App call</string>
+    <string name="voip_incoming_app">Incoming %1$s call</string>
+    <string name="voip_call_app">%1$s call · Tap to open Dialer</string>
+    <string name="voip_call_ended">Call ended</string>
+    <string name="voip_open_app">Open %1$s</string>
+    <string name="voip_open_contact">Open %1$s in %2$s</string>
+    <string name="voip_choose_contact">Select the phone number for %1$s to open their contact in %2$s</string>
+    <string name="voip_contact_failed">Could not open this contact. Check that the calling app is installed and the contact has a valid phone number.</string>
+    <string name="voip_action_failed">This call control is no longer available. Open the calling app.</string>
+    <string name="voip_start_recording">Record call</string>
+    <string name="voip_stop_recording">Stop recording</string>
+    <string name="voip_recording_app">Recording %1$s call</string>
+    <string name="voip_recording_in_progress">Microphone and app audio capture is active</string>
+    <string name="voip_recording_preparing">Starting recording…</string>
+    <string name="voip_recording_saving">Saving recording…</string>
+    <string name="voip_recording_duration">Recording · %1$s</string>
+    <string name="voip_waiting_audio">Waiting for audio from the calling app…</string>
+    <string name="voip_recording_saved">VoIP recording saved</string>
+    <string name="voip_cannot_record">Recording is unavailable. Answer the app call first, enable VoIP recording, and allow microphone and notification access. Only one call can be recorded at a time.</string>
+    <string name="voip_recording_failed">Recording could not be saved. Audio capture may be unavailable on this device, microphone access may be blocked, or storage may be full.</string>
+    <string name="voip_no_remote_audio">No audio was received from the calling app. The recording was not saved.</string>
+    <string name="voip_no_recordings">No VoIP recordings yet</string>
+    <string name="voip_play">Play recording</string>
+    <string name="voip_stop_playback">Stop playback</string>
+    <string name="voip_playback_failed">Could not load or play this recording</string>
+</resources>
