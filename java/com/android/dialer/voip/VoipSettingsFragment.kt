@@ -23,6 +23,7 @@ class VoipSettingsFragment : ExpressivePreferenceFragment() {
     private lateinit var access: Preference
     private lateinit var notifications: Preference
     private lateinit var recording: SwitchPreferenceCompat
+    private lateinit var autoRecording: SwitchPreferenceCompat
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         val context = requireContext()
@@ -80,6 +81,24 @@ class VoipSettingsFragment : ExpressivePreferenceFragment() {
         }
         preferenceScreen.addPreference(recording)
         recording.dependency = VoipCalls.ENABLED
+        autoRecording = SwitchPreferenceCompat(context).apply {
+            key = VoipCalls.AUTO_RECORDING_ENABLED
+            setTitle(R.string.voip_auto_recording_title)
+            setSummary(R.string.voip_auto_recording_summary)
+            setDefaultValue(false)
+            isIconSpaceReserved = false
+            setOnPreferenceChangeListener { _, enabled ->
+                val missing = recordingPermissions.filter {
+                    context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+                }
+                if (enabled == true && missing.isNotEmpty()) {
+                    requestPermissions(missing.toTypedArray(), AUTO_RECORDING_PERMISSIONS)
+                    false
+                } else true
+            }
+        }
+        preferenceScreen.addPreference(autoRecording)
+        autoRecording.dependency = VoipCalls.RECORDING_ENABLED
         preferenceScreen.addPreference(Preference(context).apply {
             setTitle(R.string.voip_recordings_title)
             setSummary(R.string.voip_recordings_summary)
@@ -104,7 +123,43 @@ class VoipSettingsFragment : ExpressivePreferenceFragment() {
             else R.string.voip_notifications_needed)
         val available = VoipRecordingService.hasSystemPermissions(requireContext())
         recording.isEnabled = available
+        autoRecording.isEnabled = available &&
+            VoipRecordingService.hasBackgroundRecordingPermission(requireContext())
         recording.setSummary(if (available) R.string.voip_recording_summary
             else R.string.voip_recording_unavailable)
+        updateAutoRecordingSummary()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>,
+        grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == AUTO_RECORDING_PERMISSIONS) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED } &&
+                recordingPermissions.all {
+                    requireContext().checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
+                } && autoRecording.isEnabled) {
+                autoRecording.isChecked = true
+            }
+            updateAutoRecordingSummary()
+        }
+    }
+
+    private fun updateAutoRecordingSummary() {
+        val context = requireContext()
+        autoRecording.setSummary(when {
+            !VoipRecordingService.hasSystemPermissions(context) ||
+                !VoipRecordingService.hasBackgroundRecordingPermission(context) ->
+                    R.string.voip_auto_recording_unavailable
+            recordingPermissions.any {
+                context.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+            } -> R.string.voip_auto_recording_permissions_needed
+            else -> R.string.voip_auto_recording_summary
+        })
+    }
+
+    companion object {
+        private const val AUTO_RECORDING_PERMISSIONS = 2
+        private val recordingPermissions = arrayOf(
+            Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
     }
 }

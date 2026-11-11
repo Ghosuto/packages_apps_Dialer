@@ -66,9 +66,14 @@ class VoipRecordingService : Service() {
         }
         if (recorder != null) return START_NOT_STICKY
         if (state.value.busy) { stopSelf(); return START_NOT_STICKY }
+        val automatic = intent?.action == START_AUTOMATIC
+        if (automatic && !VoipCalls.autoRecordingEnabled(this)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val token = intent?.getStringExtra(VoipNotificationListener.EXTRA_TOKEN)
         val call = VoipCalls.find(token)
-        if (call == null || !canRecord(this, call)) {
+        if (call == null || !canRecord(this, call, automatic)) {
             mutableState.value = VoipRecordingState(token = token, message = R.string.voip_cannot_record)
             stopSelf()
             return START_NOT_STICKY
@@ -106,7 +111,7 @@ class VoipRecordingService : Service() {
         mutableState.value = VoipRecordingState(call.token, busy = true)
         Thread({
             val result = try {
-                val uri = current.record(call, { canRecord(this, call) }, onStarted = {
+                val uri = current.record(call, { canRecord(this, call, automatic) }, onStarted = {
                     mutableState.update { it.copy(started = SystemClock.elapsedRealtime()) }
                     updateNotification(saving = false)
                 }, onSaving = {
@@ -189,6 +194,7 @@ class VoipRecordingService : Service() {
         private const val NOTIFICATION_ID = 4101
         private const val RESULT_ID = 4102
         private const val STOP = "com.android.dialer.voip.STOP_RECORDING"
+        private const val START_AUTOMATIC = "com.android.dialer.voip.START_AUTOMATIC_RECORDING"
         private val mutableState = MutableStateFlow(VoipRecordingState())
         internal val state = mutableState.asStateFlow()
         private val systemPermissions = arrayOf(
@@ -199,9 +205,14 @@ class VoipRecordingService : Service() {
         internal fun hasSystemPermissions(context: Context) = systemPermissions.all {
             context.checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
         }
-        internal fun canRecord(context: Context, call: VoipCall): Boolean = try {
+        internal fun hasBackgroundRecordingPermission(context: Context) =
+            context.checkSelfPermission("android.permission.START_ACTIVITIES_FROM_BACKGROUND") ==
+                PackageManager.PERMISSION_GRANTED
+        internal fun canRecord(context: Context, call: VoipCall, automatic: Boolean = false): Boolean = try {
             val audio = context.getSystemService(AudioManager::class.java)
             VoipCalls.recordingEnabled(context) && VoipCalls.hasNotificationAccess(context) &&
+                (!automatic || (VoipCalls.autoRecordingEnabled(context) &&
+                    hasBackgroundRecordingPermission(context))) &&
                 VoipCalls.calls.value.singleOrNull()?.token == call.token && !call.incoming &&
                 context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED &&
@@ -216,10 +227,11 @@ class VoipRecordingService : Service() {
                         it.audioAttributes.usage == AudioAttributes.USAGE_VOICE_COMMUNICATION })
         } catch (_: RuntimeException) { false }
 
-        internal fun start(context: Context, token: String) {
+        internal fun start(context: Context, token: String, automatic: Boolean = false) {
             if (state.value.busy) return
             try {
                 context.startForegroundService(Intent(context, VoipRecordingService::class.java)
+                    .setAction(if (automatic) START_AUTOMATIC else null)
                     .putExtra(VoipNotificationListener.EXTRA_TOKEN, token))
             } catch (e: RuntimeException) {
                 Log.w(TAG, "Recording start rejected", e)

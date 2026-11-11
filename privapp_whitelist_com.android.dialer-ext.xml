@@ -18,6 +18,7 @@
     <!-- Additional permissions on top of privapp_whitelist_com.android.dialer.xml -->
     <privapp-permissions package="com.android.dialer">
         <permission name="android.permission.CAPTURE_AUDIO_OUTPUT"/>
+        <permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"/>
         <permission name="android.permission.CAPTURE_VOICE_COMMUNICATION_OUTPUT"/>
         <permission name="android.permission.BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION"/>
         <permission name="android.permission.MODIFY_AUDIO_ROUTING"/>

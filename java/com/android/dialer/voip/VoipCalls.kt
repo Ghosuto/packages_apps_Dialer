@@ -43,6 +43,7 @@ internal data class VoipCall(
 internal object VoipCalls {
     const val ENABLED = "universal_voip_calls"
     const val RECORDING_ENABLED = "voip_call_recording"
+    const val AUTO_RECORDING_ENABLED = "voip_auto_call_recording"
     val apps = mapOf(
         "com.whatsapp" to "WhatsApp",
         "com.whatsapp.w4b" to "WhatsApp Business",
@@ -58,6 +59,8 @@ internal object VoipCalls {
     fun enabled(context: Context) = preferences(context).getBoolean(ENABLED, false)
     fun recordingEnabled(context: Context) =
         enabled(context) && preferences(context).getBoolean(RECORDING_ENABLED, false)
+    fun autoRecordingEnabled(context: Context) =
+        recordingEnabled(context) && preferences(context).getBoolean(AUTO_RECORDING_ENABLED, false)
     fun hasNotificationAccess(context: Context) =
         context.getSystemService(NotificationManager::class.java).isNotificationListenerAccessGranted(
             ComponentName(context, VoipNotificationListener::class.java))

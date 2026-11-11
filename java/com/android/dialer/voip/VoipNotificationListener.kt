@@ -15,6 +15,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -22,8 +24,30 @@ import com.android.dialer.R
 
 class VoipNotificationListener : NotificationListenerService() {
     private var connected = false
+    private val main = Handler(Looper.getMainLooper())
+    private val autoRecordingAttempted = mutableSetOf<String>()
+    private val autoRecordingMonitor = object : Runnable {
+        override fun run() {
+            val calls = VoipCalls.calls.value
+            autoRecordingAttempted.retainAll(calls.map { it.token }.toSet())
+            val recording = VoipRecordingService.state.value
+            recording.token?.let { token ->
+                if (calls.any { it.token == token }) autoRecordingAttempted.add(token)
+            }
+            if (!connected || !VoipCalls.autoRecordingEnabled(this@VoipNotificationListener) ||
+                !VoipRecordingService.hasBackgroundRecordingPermission(this@VoipNotificationListener)) return
+            val call = calls.singleOrNull()
+            if (call != null && !recording.busy && call.token !in autoRecordingAttempted &&
+                VoipRecordingService.canRecord(this@VoipNotificationListener, call, automatic = true)) {
+                autoRecordingAttempted.add(call.token)
+                VoipRecordingService.start(this@VoipNotificationListener, call.token, automatic = true)
+            }
+            if (calls.isNotEmpty()) main.postDelayed(this, 1000)
+        }
+    }
     private val preferencesListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == VoipCalls.ENABLED || key == VoipCalls.RECORDING_ENABLED) {
+        if (key == VoipCalls.ENABLED || key == VoipCalls.RECORDING_ENABLED ||
+            key == VoipCalls.AUTO_RECORDING_ENABLED) {
             refresh(false)
             if (!VoipCalls.recordingEnabled(this)) VoipRecordingService.stop(this)
         }
@@ -88,6 +112,8 @@ class VoipNotificationListener : NotificationListenerService() {
             if (recording.busy && (next.size != 1 || next.single().token != recording.token)) {
                 VoipRecordingService.stop(this)
             }
+            main.removeCallbacks(autoRecordingMonitor)
+            autoRecordingMonitor.run()
         } catch (e: RuntimeException) {
             Log.w(TAG, "Call notifications are unavailable", e)
             clearCalls()
@@ -117,6 +143,7 @@ class VoipNotificationListener : NotificationListenerService() {
         getSystemService(NotificationManager::class.java).cancel(call.key, NOTIFICATION_ID)
 
     private fun clearCalls(closeHistory: Boolean = false) {
+        main.removeCallbacks(autoRecordingMonitor)
         val manager = getSystemService(NotificationManager::class.java)
         manager.activeNotifications.filter { it.id == NOTIFICATION_ID }
             .forEach { manager.cancel(it.tag, NOTIFICATION_ID) }

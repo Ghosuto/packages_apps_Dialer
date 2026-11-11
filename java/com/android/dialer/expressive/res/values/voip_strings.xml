@@ -9,8 +9,12 @@
     <string name="voip_notifications_summary">Manage Dialer notifications and incoming call alerts</string>
     <string name="voip_notifications_needed">Allow Dialer notifications to show app calls and recording controls</string>
     <string name="voip_recording_title">VoIP call recording</string>
-    <string name="voip_recording_summary">Record app audio and this device’s microphone when you tap Record. Muting the calling app may not mute the recording.</string>
+    <string name="voip_recording_summary">Record app audio and this device’s microphone manually or automatically. Muting the calling app may not mute the recording.</string>
     <string name="voip_recording_unavailable">This ROM has not granted the audio permissions needed for VoIP recording</string>
+    <string name="voip_auto_recording_title">Automatically record VoIP calls</string>
+    <string name="voip_auto_recording_summary">Start recording supported app calls when call audio is active. Stopping a recording keeps it off until the next call.</string>
+    <string name="voip_auto_recording_permissions_needed">Allow microphone and notification permissions to record app calls automatically</string>
+    <string name="voip_auto_recording_unavailable">This ROM has not granted the permissions needed to start VoIP recording in the background</string>
     <string name="voip_recordings_title">VoIP recordings</string>
     <string name="voip_recordings_summary">Saved in Recordings/VoIP calls</string>
     <string name="voip_compatibility_title">App compatibility</string>
