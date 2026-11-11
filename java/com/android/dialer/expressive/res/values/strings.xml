@@ -79,7 +79,7 @@
     <string name="expressive_settings_answer_vibration_summary">Vibrate when an outgoing call is answered</string>
     <string name="expressive_settings_waiting_vibration_summary">Vibrate when another call arrives during a call</string>
     <string name="expressive_settings_hangup_vibration_summary">Vibrate when a call ends</string>
-    <string name="expressive_settings_recording_auto_summary">Start recording automatically when a call connects</string>
+    <string name="expressive_settings_recording_auto_summary">Start recording when a call connects, using the selected auto recording mode</string>
     <string name="expressive_settings_voicemail_notifications_summary">Choose sounds and alerts for new voicemail</string>
     <string name="expressive_settings_visual_voicemail_summary">View and play voicemail messages in the Phone app</string>
     <string name="expressive_settings_voicemail_archive_summary">Save voicemail on your phone when your mailbox is nearly full</string>
@@ -144,7 +144,7 @@
     <string name="expressive_call_recordings">Call Recordings</string>
     <string name="expressive_close_recordings">Close call recordings</string>
     <string name="expressive_auto_call_recording">Auto Call Recording</string>
-    <string name="expressive_auto_call_recording_body">Automatically record future incoming and outgoing calls for this number. This choice overrides the setting for all calls.</string>
+    <string name="expressive_auto_call_recording_body">Automatically record future incoming and outgoing calls for this number. This choice takes priority over the auto recording mode, even when automatic recording is off.</string>
     <string name="expressive_recording_unavailable">Call recording is unavailable on this device.</string>
     <string name="expressive_recording_allow_microphone">Allow microphone access for auto recording</string>
     <string name="expressive_recording_preference_failed">Couldn’t update the recording setting. Check microphone access and try again.</string>

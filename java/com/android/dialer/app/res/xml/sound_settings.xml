@@ -117,6 +117,16 @@
             android:summary="@string/expressive_settings_recording_auto_summary"
             android:title="@string/call_recording_autostart_title" />
 
+        <ListPreference
+            android:defaultValue="all"
+            android:dependency="@string/call_recording_autostart_key"
+            android:entries="@array/call_recording_autostart_mode_entries"
+            android:entryValues="@array/call_recording_autostart_mode_values"
+            android:key="@string/call_recording_autostart_mode_key"
+            android:summary="@string/call_recording_autostart_mode_summary"
+            android:title="@string/call_recording_autostart_mode_title"
+            app:iconSpaceReserved="false" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

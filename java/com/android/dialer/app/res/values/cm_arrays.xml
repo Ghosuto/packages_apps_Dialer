@@ -26,6 +26,18 @@
         <item>"1"</item>
     </string-array>
 
+    <string-array name="call_recording_autostart_mode_entries">
+        <item>@string/call_recording_autostart_mode_all</item>
+        <item>@string/call_recording_autostart_mode_saved_contacts</item>
+        <item>@string/call_recording_autostart_mode_unknown_numbers</item>
+    </string-array>
+
+    <string-array name="call_recording_autostart_mode_values" translatable="false">
+        <item>all</item>
+        <item>saved_contacts</item>
+        <item>unknown_numbers</item>
+    </string-array>
+
     <string-array name="caller_screen_style_entries">
         <item>@string/caller_screen_style_fullscreen</item>
         <item>@string/caller_screen_style_cookie</item>

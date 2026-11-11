@@ -39,6 +39,7 @@ import com.android.dialer.callrecord.CallRecordingDataStore;
 import com.android.dialer.callrecord.CallRecordingPreferences;
 import com.android.dialer.callrecord.ICallRecorderService;
 import com.android.dialer.callrecord.impl.CallRecorderService;
+import com.android.dialer.common.concurrent.DialerExecutors;
 import com.android.dialer.location.GeoUtil;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -75,6 +76,7 @@ public class CallRecorder implements CallList.Listener {
   private String recordingNumber;
   private String lastActiveCallId;
   private String lastActiveNumber;
+  private int autoStartRequestId;
 
   private final HashSet<RecordingProgressListener> progressListeners = new HashSet<>();
   private final Handler handler = new Handler(Looper.getMainLooper());
@@ -90,9 +92,14 @@ public class CallRecorder implements CallList.Listener {
         DialerCall activeCall = callList.getActiveCall();
         if (activeCall != null && TextUtils.equals(recordingCallId, activeCall.getId())
             && TextUtils.equals(pending.first, activeCall.getNumber())
-            && pending.second == activeCall.getCreationTimeMillis()
-            && (!automatic || isCallRecordAutostart(activeCall))) {
-          startRecording(activeCall, automatic);
+            && pending.second == activeCall.getCreationTimeMillis()) {
+          if (automatic) {
+            recordingCallId = null;
+            recordingNumber = null;
+            maybeStartRecordingAutomatically(activeCall);
+          } else {
+            startRecording(activeCall, false);
+          }
         } else {
           recordingCallId = null;
           recordingNumber = null;
@@ -150,6 +157,7 @@ public class CallRecorder implements CallList.Listener {
   }
 
   private void uninitialize() {
+    autoStartRequestId++;
     pendingRecordLaunch = null;
     recordingCallId = null;
     recordingNumber = null;
@@ -170,6 +178,7 @@ public class CallRecorder implements CallList.Listener {
   }
 
   private boolean startRecording(DialerCall call, boolean automatic) {
+    autoStartRequestId++;
     if (!isEnabled() || context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
         != PackageManager.PERMISSION_GRANTED) {
       recordingCallId = null;
@@ -244,6 +253,7 @@ public class CallRecorder implements CallList.Listener {
   }
 
   public void finishRecording() {
+    autoStartRequestId++;
     pendingRecordLaunch = null;
     recordingCallId = null;
     recordingNumber = null;
@@ -303,6 +313,9 @@ public class CallRecorder implements CallList.Listener {
     String activeNumber = activeCall == null ? null : activeCall.getNumber();
     boolean changed = !TextUtils.equals(lastActiveCallId, activeCallId)
         || !TextUtils.equals(lastActiveNumber, activeNumber);
+    if (changed) {
+      autoStartRequestId++;
+    }
     lastActiveCallId = activeCallId;
     lastActiveNumber = activeNumber;
     if (recordingCallId != null && (!TextUtils.equals(recordingCallId, activeCallId)
@@ -311,8 +324,8 @@ public class CallRecorder implements CallList.Listener {
     }
     if (activeCall != null) {
       initialize();
-      if (changed && isCallRecordAutostart(activeCall)) {
-        startRecording(activeCall, true);
+      if (changed) {
+        maybeStartRecordingAutomatically(activeCall);
       }
     }
   }
@@ -415,19 +428,43 @@ public class CallRecorder implements CallList.Listener {
     }
   }
 
-  private boolean isCallRecordAutostart(DialerCall call) {
+  private static String getAutoRecordingNumber(DialerCall call) {
+    return !call.isConferenceCall()
+        && call.getNumberPresentation() == TelecomManager.PRESENTATION_ALLOWED
+        ? call.getNumber() : null;
+  }
+
+  private void maybeStartRecordingAutomatically(DialerCall call) {
     if (!isEnabled() || context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
         != PackageManager.PERMISSION_GRANTED) {
-      return false;
+      return;
     }
-    try {
-      String number = !call.isConferenceCall()
-          && call.getNumberPresentation() == TelecomManager.PRESENTATION_ALLOWED
-          ? call.getNumber() : null;
-      return CallRecordingPreferences.isEnabled(context, number);
-    } catch (RuntimeException e) {
-      Log.w(TAG, "Failed to read auto-recording preference", e);
-      return false;
-    }
+    final int requestId = ++autoStartRequestId;
+    final String callId = call.getId();
+    final String callNumber = call.getNumber();
+    final long creationTime = call.getCreationTimeMillis();
+    final String number = getAutoRecordingNumber(call);
+    DialerExecutors.getLowPriorityThreadPool(context).execute(() -> {
+      final boolean enabled;
+      try {
+        enabled = CallRecordingPreferences.isEnabled(context, number);
+      } catch (RuntimeException e) {
+        Log.w(TAG, "Failed to read auto-recording preference", e);
+        return;
+      }
+      handler.post(() -> {
+        DialerCall activeCall = callList.getActiveCall();
+        if (requestId == autoStartRequestId && recordingCallId == null && activeCall != null
+            && TextUtils.equals(callId, activeCall.getId())
+            && TextUtils.equals(callNumber, activeCall.getNumber())
+            && creationTime == activeCall.getCreationTimeMillis()) {
+          if (!TextUtils.equals(number, getAutoRecordingNumber(activeCall))) {
+            maybeStartRecordingAutomatically(activeCall);
+          } else if (enabled) {
+            startRecording(activeCall, true);
+          }
+        }
+      });
+    });
   }
 }

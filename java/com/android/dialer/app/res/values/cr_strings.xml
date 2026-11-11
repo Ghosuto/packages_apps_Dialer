@@ -22,6 +22,12 @@
     <!-- Call recording -->
     <string name="call_recording_autostart_key" translatable="false">call_recording_autostart</string>
     <string name="call_recording_autostart_title">Autostart call recording</string>
+    <string name="call_recording_autostart_mode_key" translatable="false">call_recording_autostart_mode</string>
+    <string name="call_recording_autostart_mode_title">Auto recording mode</string>
+    <string name="call_recording_autostart_mode_summary">%s. Per-contact settings take priority.</string>
+    <string name="call_recording_autostart_mode_all">All calls</string>
+    <string name="call_recording_autostart_mode_saved_contacts">Saved contacts</string>
+    <string name="call_recording_autostart_mode_unknown_numbers">Unknown numbers (not saved)</string>
 
     <!-- Disable Proximity Options -->
     <string name="disable_proximity_sensor_title">Disable proximity sensor</string>
