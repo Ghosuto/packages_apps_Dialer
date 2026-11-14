@@ -226,7 +226,9 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
                                         Text(stringResource(R.string.expressive_work), Modifier.padding(start = 6.dp),
                                             style = MaterialTheme.typography.labelLarge)
                                     } else primaryCallState.connectionLabel()?.takeIf { it.isNotBlank() }?.let {
-                                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = .9f)) {
+                                        Surface(shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = .9f),
+                                            contentColor = MaterialTheme.colorScheme.onSurface) {
                                             Text(it, Modifier.padding(horizontal = 14.dp, vertical = 8.dp), style = MaterialTheme.typography.labelMedium)
                                         }
                                     }
