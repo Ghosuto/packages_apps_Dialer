@@ -168,6 +168,16 @@ public class CallRecordingDataStore {
     return recordings;
   }
 
+  /** Remove the index entry after its MediaStore recording has been deleted. */
+  public void deleteRecording(long mediaId) {
+    if (mediaId <= 0) {
+      throw new IllegalArgumentException("Recording media ID must be positive");
+    }
+    mDatabase.delete(CallRecordingsContract.CallRecording.TABLE_NAME,
+        CallRecordingsContract.CallRecording.COLUMN_NAME_MEDIA_ID + " = ?",
+        new String[] {String.valueOf(mediaId)});
+  }
+
   public SparseArray<CallRecording> getUnmigratedRecordingData() {
     final String query = "SELECT " +
         CallRecordingsContract.CallRecording._ID + "," +

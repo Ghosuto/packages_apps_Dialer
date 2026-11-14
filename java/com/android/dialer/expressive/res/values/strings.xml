@@ -153,6 +153,14 @@
     <string name="expressive_no_recordings_body">Recorded calls with this number will appear here. Enable Auto Call Recording to record future calls.</string>
     <string name="expressive_recording_playback_failed">Couldn’t play this recording. It may have been moved or deleted.</string>
     <string name="expressive_recording_progress">%1$s of %2$s</string>
+    <string name="expressive_share_recording">Share recording</string>
+    <string name="expressive_delete_recording">Delete recording</string>
+    <string name="expressive_delete_recording_title">Delete this recording?</string>
+    <string name="expressive_delete_recording_body">This recording will be permanently deleted from your device.</string>
+    <string name="expressive_deleting_recording">Deleting…</string>
+    <string name="expressive_recording_deleted">Recording deleted</string>
+    <string name="expressive_recording_share_failed">Couldn’t share this recording. It may have been moved or deleted.</string>
+    <string name="expressive_recording_delete_failed">Couldn’t delete this recording. Try again.</string>
     <string name="expressive_block_number">Block number</string>
     <string name="expressive_unblock_number">Unblock number</string>
     <string name="expressive_block_number_body">Block calls and messages from %1$s?</string>

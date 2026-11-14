@@ -31,14 +31,18 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.text.format.DateUtils
+import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -66,6 +70,7 @@ import com.android.dialer.callrecord.CallRecordingPreferences
 import com.android.dialer.callrecord.impl.CallRecorderService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal data class RecordedCall(val recording: CallRecording, val durationSeconds: Long) {
@@ -99,6 +104,7 @@ internal fun NumberCallRecordings(
     val context = LocalContext.current
     val lifecycleOwner = LocalView.current.findViewTreeLifecycleOwner()
     val playback = remember(number, context) { RecordingPlayback(context.applicationContext) }
+    val scope = rememberCoroutineScope()
     var revision by remember { mutableIntStateOf(0) }
     var recordings by remember(number) { mutableStateOf<List<RecordedCall>>(emptyList()) }
     var loading by remember(number) { mutableStateOf(true) }
@@ -109,6 +115,9 @@ internal fun NumberCallRecordings(
     var warningAccepted by remember { mutableStateOf(false) }
     var confirmRecording by remember { mutableStateOf(false) }
     var microphoneGranted by remember { mutableStateOf(false) }
+    var sharing by remember(number) { mutableStateOf(false) }
+    var pendingDelete by remember(number) { mutableStateOf<RecordedCall?>(null) }
+    var deleting by remember(number) { mutableStateOf(false) }
     val supported = CallRecorderService.isEnabled(context)
 
     fun saveAutoRecording(enabled: Boolean) {
@@ -256,9 +265,36 @@ internal fun NumberCallRecordings(
                                 durationMillis = if (active && !playback.preparing) playback.durationMillis.toLong()
                                     else entry.durationSeconds * 1000L,
                                 preparing = active && playback.preparing)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically) {
-                                FilledTonalButton(onClick = {
+                            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(Modifier.padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    FilledTonalIconButton(modifier = Modifier.size(48.dp), shape = CircleShape,
+                                        enabled = !sharing && !deleting, onClick = share@{
+                                            if (sharing || deleting) return@share
+                                            sharing = true
+                                            if (active) playback.stop()
+                                            scope.launch {
+                                                try {
+                                                    shareCallRecording(context, entry)
+                                                } catch (e: CancellationException) { throw e }
+                                                catch (_: Exception) {
+                                                    Toast.makeText(context, R.string.expressive_recording_share_failed,
+                                                        Toast.LENGTH_LONG).show()
+                                                } finally { sharing = false }
+                                            }
+                                        }) {
+                                        Symbol(DialerSymbol.Share, stringResource(R.string.expressive_share_recording))
+                                    }
+                                    FilledTonalIconButton(modifier = Modifier.size(48.dp), shape = CircleShape,
+                                        enabled = !sharing && !deleting, onClick = { pendingDelete = entry },
+                                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                                            contentColor = MaterialTheme.colorScheme.onErrorContainer)) {
+                                        Symbol(DialerSymbol.Delete, stringResource(R.string.expressive_delete_recording))
+                                    }
+                                }
+                                FilledTonalButton(modifier = Modifier.heightIn(min = 48.dp), enabled = !deleting, onClick = {
                                     if (active) playback.stop() else playback.play(entry.id, entry.uri)
                                 }) {
                                     Symbol(if (active) DialerSymbol.Stop else DialerSymbol.Play)
@@ -271,6 +307,48 @@ internal fun NumberCallRecordings(
                 }
             }
         }
+    }
+    pendingDelete?.let { entry ->
+        AlertDialog(onDismissRequest = { if (!deleting) pendingDelete = null },
+            icon = { Symbol(DialerSymbol.Delete) },
+            iconContentColor = MaterialTheme.colorScheme.error,
+            title = { Text(stringResource(R.string.expressive_delete_recording_title)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.expressive_delete_recording_body))
+                    Text(entry.recording.fileName, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = !deleting, colors = ButtonDefaults.textButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error), onClick = delete@{
+                    if (deleting) return@delete
+                    deleting = true
+                    if (playback.mediaId == entry.id) playback.stop()
+                    scope.launch {
+                        try {
+                            deleteCallRecording(context.applicationContext, entry)
+                            recordings = recordings.filterNot { it.id == entry.id }
+                            pendingDelete = null
+                            revision++
+                            Toast.makeText(context, R.string.expressive_recording_deleted, Toast.LENGTH_SHORT).show()
+                        } catch (e: CancellationException) { throw e }
+                        catch (_: Exception) {
+                            revision++
+                            Toast.makeText(context, R.string.expressive_recording_delete_failed, Toast.LENGTH_LONG).show()
+                        } finally { deleting = false }
+                    }
+                }) {
+                    Text(stringResource(if (deleting) R.string.expressive_deleting_recording else R.string.expressive_delete))
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !deleting, onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.expressive_cancel))
+                }
+            })
     }
     if (confirmRecording) AlertDialog(onDismissRequest = { confirmRecording = false },
         title = { Text(stringResource(R.string.recording_warning_title)) },
