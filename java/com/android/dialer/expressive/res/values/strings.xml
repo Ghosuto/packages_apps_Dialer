@@ -183,6 +183,7 @@
     <string name="expressive_voicemail_download">Audio is not downloaded yet. Call voicemail to listen.</string>
     <string name="expressive_playback_failed">Couldn’t play this message. Try calling voicemail.</string>
     <string name="expressive_play">Play</string>
+    <string name="expressive_pause">Pause</string>
     <string name="expressive_stop">Stop</string>
     <string name="expressive_back">Back</string>
     <string name="expressive_suspected_spam">Suspected spam</string>

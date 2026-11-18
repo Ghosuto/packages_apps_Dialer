@@ -31,6 +31,7 @@ import static com.android.incallui.NotificationBroadcastReceiver.ACTION_MUTE_ONG
 import static com.android.incallui.NotificationBroadcastReceiver.ACTION_UNMUTE_ONGOING_CALL;
 import static com.android.incallui.NotificationBroadcastReceiver.ACTION_TURN_OFF_SPEAKER;
 import static com.android.incallui.NotificationBroadcastReceiver.ACTION_TURN_ON_SPEAKER;
+import static com.android.incallui.NotificationBroadcastReceiver.ACTION_SEND_TO_LOCAL_VOICEMAIL;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -432,6 +433,9 @@ public class StatusBarNotifier
         builder.addExtras(createIncomingCallExtras(true /* isVideo */));
       } else {
         addAnswerAction(builder);
+        if (com.android.dialer.localvoicemail.LocalVoicemailPreferences.isEnabled(context)) {
+          addSendToVoicemailAction(builder, call);
+        }
         builder.addExtras(createIncomingCallExtras(false /* isVideo */));
       }
     }
@@ -812,6 +816,29 @@ public class StatusBarNotifier
                 getActionText(
                     R.string.notification_action_answer, R.color.notification_action_accept),
                 answerVoicePendingIntent)
+            .build());
+  }
+
+  private void addSendToVoicemailAction(Notification.Builder builder, DialerCall call) {
+    LogUtil.d(
+        "StatusBarNotifier.addSendToVoicemailAction",
+        "will show \"Send to Voicemail\" action in incoming call Notification");
+    Intent intent = new Intent(context, NotificationBroadcastReceiver.class);
+    intent.setAction(ACTION_SEND_TO_LOCAL_VOICEMAIL);
+    if (call != null) {
+      intent.putExtra(NotificationBroadcastReceiver.EXTRA_CALL_ID, call.getId());
+    }
+    PendingIntent voicemailPendingIntent =
+        PendingIntent.getBroadcast(
+            context,
+            call != null ? call.getId().hashCode() : 0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+    builder.addAction(
+        new Notification.Action.Builder(
+                Icon.createWithResource(context, R.drawable.quantum_ic_voicemail_vd_theme_24),
+                context.getText(R.string.local_voicemail_send_to_voicemail),
+                voicemailPendingIntent)
             .build());
   }
 

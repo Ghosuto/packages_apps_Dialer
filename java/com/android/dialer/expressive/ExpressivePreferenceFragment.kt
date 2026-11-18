@@ -202,7 +202,7 @@ private fun preferenceSymbol(pref: Preference): DialerSymbol {
         route == "CallHistoryBackupFragment" -> DialerSymbol.History
         key == "call_statistics" -> DialerSymbol.History
         route == "LookupSettingsFragment" || key.contains("lookup") -> DialerSymbol.Search
-        route == "VoicemailSettingsFragment" || route == "PhoneAccountSelectionFragment" -> DialerSymbol.Voicemail
+        route == "LocalVoicemailSettingsFragment" || route == "VoicemailSettingsFragment" || route == "PhoneAccountSelectionFragment" -> DialerSymbol.Voicemail
         action.contains("ACCESSIBILITY") -> DialerSymbol.Accessibility
         action.contains("BLOCKED") || key.contains("dnd") -> DialerSymbol.Block
         action.contains("SMS") || key.contains("post_call") -> DialerSymbol.Message
