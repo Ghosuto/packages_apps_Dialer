@@ -350,6 +350,8 @@ public class InCallPresenter implements CallList.Listener, AudioModeProvider.Aud
     activeCallsListener = new ActiveCallsCallListListener(context);
     this.callList.addListener(activeCallsListener);
 
+    com.android.dialer.localvoicemail.LocalVoicemailManager.init(context);
+
     VideoPauseController.getInstance().setUp(this);
 
     AudioModeProvider.getInstance().addListener(this);

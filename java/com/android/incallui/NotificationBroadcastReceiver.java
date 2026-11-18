@@ -71,8 +71,14 @@ public class NotificationBroadcastReceiver extends BroadcastReceiver {
   public static final String ACTION_PULL_EXTERNAL_CALL =
       "com.android.incallui.ACTION_PULL_EXTERNAL_CALL";
 
+  public static final String ACTION_SEND_TO_LOCAL_VOICEMAIL =
+      "com.android.incallui.ACTION_SEND_TO_LOCAL_VOICEMAIL";
+
   public static final String EXTRA_NOTIFICATION_ID =
       "com.android.incallui.extra.EXTRA_NOTIFICATION_ID";
+
+  public static final String EXTRA_CALL_ID =
+      "com.android.incallui.extra.EXTRA_CALL_ID";
 
   @SuppressLint("MissingPermission")
   @Override
@@ -105,6 +111,27 @@ public class NotificationBroadcastReceiver extends BroadcastReceiver {
       TelecomAdapter.getInstance().setAudioRoute(CallAudioState.ROUTE_SPEAKER);
     } else if (action.equals(ACTION_TURN_OFF_SPEAKER)) {
       TelecomAdapter.getInstance().setAudioRoute(CallAudioState.ROUTE_WIRED_OR_EARPIECE);
+    } else if (action.equals(ACTION_SEND_TO_LOCAL_VOICEMAIL)) {
+      sendToLocalVoicemail(intent.getStringExtra(EXTRA_CALL_ID));
+    }
+  }
+
+  private void sendToLocalVoicemail(String callId) {
+    CallList callList = InCallPresenter.getInstance().getCallList();
+    if (callList == null) {
+      LogUtil.e("NotificationBroadcastReceiver.sendToLocalVoicemail", "call list is null");
+      return;
+    }
+    DialerCall call = callList.getIncomingCall();
+    if (call == null && callId != null) {
+      call = callList.getCallById(callId);
+    }
+    if (call != null) {
+      com.android.dialer.localvoicemail.LocalVoicemailManager manager =
+          com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+      if (manager != null) {
+        manager.sendToVoicemail(call);
+      }
     }
   }
 

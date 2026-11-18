@@ -36,28 +36,44 @@ import com.android.dialer.R
 
 // Keep the call actions recognizable across dynamic and monochrome themes.
 private val DeclineRed = Color(0xFFE53935)
+private val VoicemailIndigo = Color(0xFF5E35B1)
 
 @Composable
 internal fun IncomingCallButtons(
     enabled: Boolean,
     onAnswer: () -> Unit,
     onReject: () -> Unit,
+    onVoicemail: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Row(modifier.widthIn(max = 360.dp).fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+    val buttonSize = if (onVoicemail != null) 72.dp else 80.dp
+    val spacing = if (onVoicemail != null) 16.dp else 24.dp
+    Row(modifier.widthIn(max = 380.dp).fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(spacing),
         verticalAlignment = Alignment.Top) {
         IncomingCallButton(
             label = stringResource(R.string.expressive_decline),
             symbol = DialerSymbol.EndCall,
             color = DeclineRed,
+            buttonSize = buttonSize,
             enabled = enabled,
             onClick = onReject,
             modifier = Modifier.weight(1f))
+        if (onVoicemail != null) {
+            IncomingCallButton(
+                label = stringResource(R.string.local_voicemail_title),
+                symbol = DialerSymbol.Voicemail,
+                color = VoicemailIndigo,
+                buttonSize = buttonSize,
+                enabled = enabled,
+                onClick = onVoicemail,
+                modifier = Modifier.weight(1f))
+        }
         IncomingCallButton(
             label = stringResource(R.string.expressive_answer),
             symbol = DialerSymbol.Phone,
             color = AnswerGreen,
+            buttonSize = buttonSize,
             enabled = enabled,
             onClick = onAnswer,
             modifier = Modifier.weight(1f))
@@ -70,6 +86,7 @@ private fun IncomingCallButton(
     symbol: DialerSymbol,
     color: Color,
     enabled: Boolean,
+    buttonSize: androidx.compose.ui.unit.Dp = 80.dp,
     onClick: () -> Unit,
     modifier: Modifier
 ) {
@@ -77,11 +94,12 @@ private fun IncomingCallButton(
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (enabled && pressed) .92f else 1f,
         spring(.8f, 500f), label = "incoming call button press")
+    val iconSize = if (buttonSize < 80.dp) 30.dp else 34.dp
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Button(
             onClick = onClick,
             enabled = enabled,
-            modifier = Modifier.size(80.dp).graphicsLayer {
+            modifier = Modifier.size(buttonSize).graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             },
@@ -95,10 +113,10 @@ private fun IncomingCallButton(
             interactionSource = interaction
         ) {
             Symbol(symbol, description = label,
-                modifier = Modifier.size(34.dp).incomingCallShake(enabled && symbol == DialerSymbol.Phone))
+                modifier = Modifier.size(iconSize).incomingCallShake(enabled && symbol == DialerSymbol.Phone))
         }
         Text(label, Modifier.padding(top = 12.dp).clearAndSetSemantics {},
-            style = MaterialTheme.typography.bodyLarge,
+            style = if (buttonSize < 80.dp) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else .5f),
             textAlign = TextAlign.Center)
     }
