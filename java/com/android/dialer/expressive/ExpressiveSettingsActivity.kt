@@ -54,7 +54,8 @@ class ExpressiveSettingsActivity : FragmentActivity(), PreferenceFragmentCompat.
             "com.android.dialer.app.settings.DisplayOptionsSettingsFragment" to R.string.display_options_title,
             "com.android.dialer.app.settings.SoundSettingsFragment" to R.string.sounds_and_vibration_title,
             "com.android.dialer.app.settings.OtherSettingsFragment" to R.string.other_settings_label,
-            "com.android.dialer.lookup.LookupSettingsFragment" to R.string.lookup_settings_label)
+            "com.android.dialer.lookup.LookupSettingsFragment" to R.string.lookup_settings_label,
+            "com.android.dialer.localvoicemail.LocalVoicemailSettingsFragment" to R.string.local_voicemail_title)
         val rootRoute = intent.data?.schemeSpecificPart?.takeIf { it in sections }
             ?: DialerSettingsActivity.PrefsFragment::class.java.name
         val rootHeading = getString(sections.getValue(rootRoute))

@@ -46,8 +46,6 @@ import com.android.dialer.expressive.CallStatsActivity;
 import com.android.dialer.expressive.QuickResponsesActivity;
 import com.android.dialer.lookup.LookupSettingsFragment;
 import com.android.dialer.util.PermissionsUtil;
-import com.android.dialer.voicemail.settings.VoicemailSettingsFragment;
-import com.android.voicemail.VoicemailClient;
 
 /** Activity for dialer settings. */
 public class DialerSettingsActivity extends BaseActivity implements
@@ -159,7 +157,13 @@ public class DialerSettingsActivity extends BaseActivity implements
         getPreferenceScreen().addPreference(blockedCalls);
       }
 
-      addVoicemailSettings(isPrimaryUser);
+      Preference localVoicemailSettings = new Preference(getContext());
+      localVoicemailSettings.setTitle(R.string.local_voicemail_title);
+      localVoicemailSettings.setSummary(R.string.local_voicemail_summary);
+      localVoicemailSettings.setFragment(
+          com.android.dialer.localvoicemail.LocalVoicemailSettingsFragment.class.getName());
+      localVoicemailSettings.setIconSpaceReserved(false);
+      getPreferenceScreen().addPreference(localVoicemailSettings);
 
       if (isPrimaryUser
               && (TelephonyManagerCompat.isTtyModeSupported(telecomManager)
@@ -221,74 +225,6 @@ public class DialerSettingsActivity extends BaseActivity implements
       }
       super.onPreferenceTreeClick(preference);
       return false;
-    }
-
-    private void addVoicemailSettings(boolean isPrimaryUser) {
-      if (!isPrimaryUser) {
-        LogUtil.i("DialerSettingsActivity.addVoicemailSettings", "user not primary user");
-        return;
-      }
-
-      if (!PermissionsUtil.hasReadPhoneStatePermissions(getContext())) {
-        LogUtil.i("DialerSettingsActivity.addVoicemailSettings", "Missing READ_PHONE_STATE");
-        return;
-      }
-
-      LogUtil.i("DialerSettingsActivity.addVoicemailSettings", "adding voicemail settings");
-      Preference voicemailSettings = new Preference(getContext());
-      voicemailSettings.setTitle(R.string.voicemail_settings_label);
-      voicemailSettings.setSummary(R.string.expressive_settings_voicemail_summary);
-      Bundle bundle = new Bundle();
-      PhoneAccountHandle soleAccount = getSoleSimAccount();
-      if (soleAccount == null) {
-        LogUtil.i("DialerSettingsActivity.addVoicemailSettings",
-                "showing multi-SIM voicemail settings");
-        voicemailSettings.setFragment(PhoneAccountSelectionFragment.class.getName());
-        bundle.putString(
-                PhoneAccountSelectionFragment.PARAM_TARGET_FRAGMENT,
-                VoicemailSettingsFragment.class.getName());
-        bundle.putString(
-                PhoneAccountSelectionFragment.PARAM_PHONE_ACCOUNT_HANDLE_KEY,
-                VoicemailClient.PARAM_PHONE_ACCOUNT_HANDLE);
-        bundle.putBundle(PhoneAccountSelectionFragment.PARAM_ARGUMENTS, new Bundle());
-        bundle.putInt(PhoneAccountSelectionFragment.PARAM_TARGET_TITLE_RES,
-                R.string.voicemail_settings_label);
-      } else {
-        LogUtil.i("DialerSettingsActivity.addVoicemailSettings",
-                "showing single-SIM voicemail settings");
-        voicemailSettings.setFragment(VoicemailSettingsFragment.class.getName());
-        bundle.putParcelable(VoicemailClient.PARAM_PHONE_ACCOUNT_HANDLE, soleAccount);
-      }
-      voicemailSettings.getExtras().putAll(bundle);
-      voicemailSettings.setIconSpaceReserved(false);
-      getPreferenceScreen().addPreference(voicemailSettings);
-    }
-
-    /**
-     * @return the only SIM phone account, or {@code null} if there are none or more than one. Note:
-     * having a empty SIM slot still count as a PhoneAccountHandle that is "invalid", and
-     * voicemail settings should still be available for it.
-     */
-    @SuppressLint("MissingPermission")
-    @Nullable
-    private PhoneAccountHandle getSoleSimAccount() {
-      TelecomManager telecomManager = requireContext().getSystemService(TelecomManager.class);
-      PhoneAccountHandle result = null;
-      for (PhoneAccountHandle phoneAccountHandle : telecomManager.getCallCapablePhoneAccounts()) {
-        PhoneAccount phoneAccount = telecomManager.getPhoneAccount(phoneAccountHandle);
-        if (phoneAccount == null) {
-          continue;
-        }
-        if (phoneAccount.hasCapabilities(PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION)) {
-          LogUtil.i("DialerSettingsActivity.getSoleSimAccount",
-                  phoneAccountHandle + " is a SIM account");
-          if (result != null) {
-            return null;
-          }
-          result = phoneAccountHandle;
-        }
-      }
-      return result;
     }
 
     /**

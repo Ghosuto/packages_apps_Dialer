@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2024-2026 Lunaris AOSP
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<resources>
+    <!-- Local Voicemail Settings -->
+    <string name="local_voicemail_title">Local Voicemail</string>
+    <string name="local_voicemail_summary">Answer incoming calls locally on your device without carrier services</string>
+    <string name="local_voicemail_enable_title">Enable on-device voicemail</string>
+    <string name="local_voicemail_enable_summary">Automatically answers incoming calls after a delay and records caller messages directly to storage</string>
+
+    <string name="local_voicemail_ring_delay_title">Ring delay before answering</string>
+    <string name="local_voicemail_ring_delay_summary">%s</string>
+
+    <string name="local_voicemail_max_duration_title">Maximum recording duration</string>
+    <string name="local_voicemail_max_duration_summary">%s</string>
+
+    <string name="local_voicemail_filter_title">Respond to calls from</string>
+    <string name="local_voicemail_filter_summary">%s</string>
+
+    <string name="local_voicemail_greeting_title">Voicemail greeting</string>
+    <string name="local_voicemail_greeting_summary">Play greeting prompt to callers</string>
+    <string name="local_voicemail_greeting_play">Preview default greeting</string>
+    <string name="local_voicemail_greeting_record">Record custom greeting</string>
+    <string name="local_voicemail_greeting_reset">Reset to default greeting</string>
+    <string name="local_voicemail_greeting_recorded_toast">Custom greeting saved</string>
+
+    <!-- InCallUI & Notification actions -->
+    <string name="local_voicemail_send_to_voicemail">Send to Voicemail</string>
+    <string name="local_voicemail_recording_notification_title">Recording local voicemail</string>
+    <string name="local_voicemail_recording_notification_text">Caller is leaving a message</string>
+    <string name="local_voicemail_notification_channel_name">Local Voicemail</string>
+</resources>

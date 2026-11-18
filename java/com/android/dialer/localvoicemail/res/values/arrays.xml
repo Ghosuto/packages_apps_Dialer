@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2024-2026 Lunaris AOSP
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<resources>
+    <!-- Ring delay options -->
+    <string-array name="local_voicemail_ring_delay_entries">
+        <item>10 seconds</item>
+        <item>15 seconds</item>
+        <item>20 seconds (Default)</item>
+        <item>30 seconds</item>
+        <item>45 seconds</item>
+    </string-array>
+    <string-array name="local_voicemail_ring_delay_values" translatable="false">
+        <item>10</item>
+        <item>15</item>
+        <item>20</item>
+        <item>30</item>
+        <item>45</item>
+    </string-array>
+
+    <!-- Max recording duration options -->
+    <string-array name="local_voicemail_max_duration_entries">
+        <item>30 seconds</item>
+        <item>60 seconds (Default)</item>
+        <item>90 seconds</item>
+        <item>120 seconds</item>
+    </string-array>
+    <string-array name="local_voicemail_max_duration_values" translatable="false">
+        <item>30</item>
+        <item>60</item>
+        <item>90</item>
+        <item>120</item>
+    </string-array>
+
+    <!-- Caller filter options -->
+    <string-array name="local_voicemail_filter_entries">
+        <item>All incoming calls</item>
+        <item>Saved contacts only</item>
+        <item>Unknown numbers only</item>
+    </string-array>
+    <string-array name="local_voicemail_filter_values" translatable="false">
+        <item>all</item>
+        <item>saved_contacts</item>
+        <item>unknown_numbers</item>
+    </string-array>
+</resources>
