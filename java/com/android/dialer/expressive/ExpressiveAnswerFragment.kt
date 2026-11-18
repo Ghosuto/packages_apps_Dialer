@@ -25,6 +25,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.semantics.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -95,6 +98,14 @@ class ExpressiveAnswerFragment : ExpressiveCallFragment(), AnswerScreen {
         takingAction = true
         answerDelegate.onAnswerAndReleaseCall()
     }
+    private fun answerAsVoicemail() {
+        if (!canTakeAction()) return
+        takingAction = true
+        val call = CallList.getInstance().getCallById(getCallId())
+        if (call != null) {
+            com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance()?.sendToVoicemail(call)
+        }
+    }
     private fun openResponses() {
         if (!canTakeAction() || responses.isEmpty()) return
         showResponses = true
@@ -123,22 +134,70 @@ class ExpressiveAnswerFragment : ExpressiveCallFragment(), AnswerScreen {
             if (takingAction) { kotlinx.coroutines.delay(5000); takingAction = false }
         }
         val actionsEnabled = canTakeAction()
+        val voicemailEnabled = remember(requireContext()) {
+            com.android.dialer.localvoicemail.LocalVoicemailPreferences.isEnabled(requireContext())
+        }
         if (incomingCallStyle == INCOMING_CALL_STYLE_DEFAULT) IncomingCallHandle(enabled = actionsEnabled)
         if (incomingCallStyle == INCOMING_CALL_STYLE_GOOGLE) IncomingCallGoogleHandle(enabled = actionsEnabled)
         if (primaryInfoState.answeringDisconnectsOngoingCall()) Text(stringResource(R.string.expressive_answer_ends_call), Modifier.padding(12.dp))
         if (allowAnswerAndRelease()) TextButton(onClick = ::answerAndReleaseCall, enabled = actionsEnabled) {
             Text(stringResource(R.string.expressive_answer_release))
         }
-        FilledTonalButton(onClick = ::openResponses, enabled = actionsEnabled && responses.isNotEmpty(),
-            modifier = Modifier.padding(top = 8.dp).heightIn(min = 48.dp), shape = CircleShape,
-            colors = ButtonDefaults.filledTonalButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)) {
-            Text(stringResource(R.string.expressive_reply))
+        val showReply = responses.isNotEmpty()
+        val showVoicemail = voicemailEnabled && incomingCallStyle != INCOMING_CALL_STYLE_IOS
+        if (showReply || showVoicemail) {
+            Row(
+                modifier = Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (showReply) {
+                    FilledTonalButton(
+                        onClick = ::openResponses,
+                        enabled = actionsEnabled,
+                        modifier = Modifier.height(48.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
+                    ) {
+                        Symbol(DialerSymbol.Message, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            stringResource(R.string.expressive_reply),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                if (showVoicemail) {
+                    FilledTonalButton(
+                        onClick = ::answerAsVoicemail,
+                        enabled = actionsEnabled,
+                        modifier = Modifier.height(48.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
+                    ) {
+                        Symbol(DialerSymbol.Voicemail, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            stringResource(R.string.expressive_voicemail),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
         }
         if (incomingCallStyle == INCOMING_CALL_STYLE_IOS) IncomingCallButtons(
             enabled = actionsEnabled, onAnswer = ::answerCall, onReject = ::rejectCall,
+            onVoicemail = if (voicemailEnabled) (::answerAsVoicemail) else null,
             modifier = Modifier.padding(top = 28.dp, bottom = 24.dp))
         if (primaryInfoState.isSpam() || primaryInfoState.carrierSpamStatus() == com.android.dialer.spam.CarrierCallIdentity.SPAM_CONFIRMED ||
                 primaryInfoState.carrierSpamStatus() == com.android.dialer.spam.CarrierCallIdentity.SPAM_SUSPECTED) {
