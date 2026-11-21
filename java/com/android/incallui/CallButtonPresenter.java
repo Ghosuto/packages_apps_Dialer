@@ -251,6 +251,13 @@ public class CallButtonPresenter
 
   @Override
   public void muteClicked(boolean checked, boolean clickedByUser) {
+    com.android.dialer.localvoicemail.LocalVoicemailManager voicemail =
+        com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+    if (clickedByUser && !checked && voicemail != null
+        && voicemail.isVoicemailActiveForCall(call)) {
+      voicemail.cancelVoicemailAndPickup(call);
+      return;
+    }
     LogUtil.i(
         "CallButtonPresenter", "turning on mute: %s, clicked by user: %s", checked, clickedByUser);
     TelecomAdapter.getInstance().mute(checked);

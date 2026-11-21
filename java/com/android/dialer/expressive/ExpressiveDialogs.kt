@@ -140,6 +140,35 @@ object ExpressiveDialogs {
         dialog.show()
     }
 
+    @JvmStatic
+    fun showGreetingRecording(owner: Fragment, onSave: Runnable, onCancel: Runnable): ComponentDialog? {
+        val activity = owner.activity ?: return null
+        if (owner.view == null) return null
+        val lifecycle = owner.viewLifecycleOwner.lifecycle
+        val dialog = createDialog(activity) { window ->
+            DialogContent(stringResource(R.string.local_voicemail_greeting_recording), DialerSymbol.Mic) {
+                Text(stringResource(R.string.local_voicemail_greeting_recording_body),
+                    style = MaterialTheme.typography.bodyLarge)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { window.cancel() }) { Text(stringResource(android.R.string.cancel)) }
+                    Spacer(Modifier.width(8.dp))
+                    FilledTonalButton(onClick = { window.dismiss(); onSave.run() }) {
+                        Text(stringResource(R.string.local_voicemail_greeting_save))
+                    }
+                }
+            }
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY) dialog.cancel()
+        }
+        lifecycle.addObserver(observer)
+        dialog.setOnCancelListener { onCancel.run() }
+        dialog.setOnDismissListener { lifecycle.removeObserver(observer) }
+        dialog.show()
+        return dialog
+    }
+
     private fun createDialog(context: Context, content: @Composable (ComponentDialog) -> Unit): ComponentDialog {
         val dialog = ComponentDialog(context)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)

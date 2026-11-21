@@ -134,9 +134,8 @@ class ExpressiveAnswerFragment : ExpressiveCallFragment(), AnswerScreen {
             if (takingAction) { kotlinx.coroutines.delay(5000); takingAction = false }
         }
         val actionsEnabled = canTakeAction()
-        val voicemailEnabled = remember(requireContext()) {
-            com.android.dialer.localvoicemail.LocalVoicemailPreferences.isEnabled(requireContext())
-        }
+        val voicemailEnabled = com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance()
+            ?.canSendToVoicemail(CallList.getInstance().getCallById(getCallId())) == true
         if (incomingCallStyle == INCOMING_CALL_STYLE_DEFAULT) IncomingCallHandle(enabled = actionsEnabled)
         if (incomingCallStyle == INCOMING_CALL_STYLE_GOOGLE) IncomingCallGoogleHandle(enabled = actionsEnabled)
         if (primaryInfoState.answeringDisconnectsOngoingCall()) Text(stringResource(R.string.expressive_answer_ends_call), Modifier.padding(12.dp))

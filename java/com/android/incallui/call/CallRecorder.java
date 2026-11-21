@@ -179,6 +179,7 @@ public class CallRecorder implements CallList.Listener {
 
   private boolean startRecording(DialerCall call, boolean automatic) {
     autoStartRequestId++;
+    if (isLocalVoicemailBusy()) return false;
     if (!isEnabled() || context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
         != PackageManager.PERMISSION_GRANTED) {
       recordingCallId = null;
@@ -308,6 +309,12 @@ public class CallRecorder implements CallList.Listener {
     if (context == null) {
       return;
     }
+    if (isLocalVoicemailBusy()) {
+      finishRecording();
+      lastActiveCallId = null;
+      lastActiveNumber = null;
+      return;
+    }
     DialerCall activeCall = callList.getActiveCall();
     String activeCallId = activeCall == null ? null : activeCall.getId();
     String activeNumber = activeCall == null ? null : activeCall.getNumber();
@@ -435,7 +442,7 @@ public class CallRecorder implements CallList.Listener {
   }
 
   private void maybeStartRecordingAutomatically(DialerCall call) {
-    if (!isEnabled() || context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+    if (isLocalVoicemailBusy() || !isEnabled() || context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
         != PackageManager.PERMISSION_GRANTED) {
       return;
     }
@@ -454,7 +461,7 @@ public class CallRecorder implements CallList.Listener {
       }
       handler.post(() -> {
         DialerCall activeCall = callList.getActiveCall();
-        if (requestId == autoStartRequestId && recordingCallId == null && activeCall != null
+        if (!isLocalVoicemailBusy() && requestId == autoStartRequestId && recordingCallId == null && activeCall != null
             && TextUtils.equals(callId, activeCall.getId())
             && TextUtils.equals(callNumber, activeCall.getNumber())
             && creationTime == activeCall.getCreationTimeMillis()) {
@@ -466,5 +473,11 @@ public class CallRecorder implements CallList.Listener {
         }
       });
     });
+  }
+
+  private static boolean isLocalVoicemailBusy() {
+    com.android.dialer.localvoicemail.LocalVoicemailManager manager =
+        com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+    return manager != null && manager.isVoicemailSessionBusy();
   }
 }

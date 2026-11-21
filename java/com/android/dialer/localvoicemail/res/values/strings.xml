@@ -22,7 +22,8 @@
     <string name="local_voicemail_enable_summary">Automatically answers incoming calls after a delay and records caller messages directly to storage</string>
 
     <string name="local_voicemail_ring_delay_title">Ring delay before answering</string>
-    <string name="local_voicemail_ring_delay_summary">%s</string>
+    <string name="local_voicemail_ring_delay_summary">%s. Choose a delay shorter than your carrier’s unanswered-call timeout.</string>
+    <string name="local_voicemail_save_pending">Voicemail could not be added to your inbox. The recording is kept for retry.</string>
 
     <string name="local_voicemail_max_duration_title">Maximum recording duration</string>
     <string name="local_voicemail_max_duration_summary">%s</string>
@@ -42,4 +43,14 @@
     <string name="local_voicemail_recording_notification_title">Recording local voicemail</string>
     <string name="local_voicemail_recording_notification_text">Caller is leaving a message</string>
     <string name="local_voicemail_notification_channel_name">Local Voicemail</string>
+    <string name="local_voicemail_pick_up">Pick up</string>
+    <string name="local_voicemail_ending_call">Ending voicemail call</string>
+    <string name="local_voicemail_playing_greeting">Playing voicemail greeting</string>
+    <string name="local_voicemail_failed">Local voicemail could not access call audio</string>
+    <string name="local_voicemail_unsupported">Local voicemail requires supported cellular call audio and microphone permission. Unlock your phone to configure it.</string>
+    <string name="local_voicemail_greeting_recording">Recording greeting…</string>
+    <string name="local_voicemail_greeting_recording_body">Speak your greeting, then save it. Recording stops after 30 seconds. A beep is added for callers.</string>
+    <string name="local_voicemail_greeting_record_failed">Could not record your greeting</string>
+    <string name="local_voicemail_greeting_save">Save greeting</string>
+    <string name="local_voicemail_greeting_reset_done">Default greeting restored</string>
 </resources>

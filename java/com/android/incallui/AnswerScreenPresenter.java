@@ -105,6 +105,9 @@ public class AnswerScreenPresenter
 
   @Override
   public void onAnswer(boolean answerVideoAsAudio) {
+    com.android.dialer.localvoicemail.LocalVoicemailManager voicemail =
+        com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+    if (voicemail != null) voicemail.onUserAnswer(call);
     ListenableFuture<Void> answerPrecondition = Futures.immediateFuture(null);
 
     Futures.addCallback(

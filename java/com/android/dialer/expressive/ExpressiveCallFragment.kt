@@ -65,6 +65,7 @@ import com.android.incallui.call.state.DialerCallState
 import com.android.incallui.audioroute.AudioRouteSelectorDialogFragment.AudioRouteSelectorPresenter
 import kotlinx.coroutines.delay
 import com.android.dialer.spam.CarrierCallIdentity
+import com.android.dialer.localvoicemail.LocalVoicemailManager
 
 private const val ROUNDED_MESSAGE = -1002
 private const val CALL_CONTROLS_PER_PAGE = 6
@@ -94,6 +95,8 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
     private var audio by mutableStateOf<CallAudioState?>(null)
     private var recording by mutableStateOf(false)
     private var recordingDuration by mutableLongStateOf(0)
+    private var voicemailRevision by mutableIntStateOf(0)
+    private val voicemailListener = Runnable { voicemailRevision++ }
     private var conference by mutableStateOf(false)
     private var dialpad by mutableStateOf(false)
     private var locationVisible by mutableStateOf(false)
@@ -130,6 +133,7 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
     }
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        LocalVoicemailManager.getInstance()?.addListener(voicemailListener)
         screenDelegate = (requireActivity() as InCallScreenDelegateFactory).newInCallScreenDelegate()
         screenDelegate.onInCallScreenDelegateInit(this)
         screenDelegate.onInCallScreenReady()
@@ -142,6 +146,7 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
     override fun onResume() { super.onResume(); screenDelegate.onInCallScreenResumed() }
     override fun onPause() { screenDelegate.onInCallScreenPaused(); super.onPause() }
     override fun onDestroyView() {
+        LocalVoicemailManager.getInstance()?.removeListener(voicemailListener)
         buttonUiReady = false
         controlsEnabled = false
         endEnabled = false
@@ -170,6 +175,11 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
     }
     @Composable
     private fun CallContent() {
+        val voicemailCall = remember(voicemailRevision, primaryInfoState) {
+            if (answering) null else LocalVoicemailManager.getInstance()?.getVoicemailCall()
+        }
+        val voicemail = LocalVoicemailManager.getInstance()
+        val localVoicemailActive = voicemail?.isVoicemailActiveForCall(voicemailCall) == true
         val name = primaryInfoState.name()?.takeIf { it.isNotBlank() } ?: primaryInfoState.number()?.takeIf { it.isNotBlank() }
             ?: stringResource(R.string.expressive_unknown)
         val number = if (primaryInfoState.numberPresentation() == android.provider.CallLog.Calls.PRESENTATION_ALLOWED)
@@ -292,7 +302,17 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
                             }
                         }, actions = {
                             if (answering) AnswerActions() else {
-                                AnimatedVisibility(!dialpad && primaryInfoState.showInCallButtonGrid()) {
+                                if (localVoicemailActive) {
+                                    FilledTonalButton(
+                                        onClick = { voicemailCall?.let { voicemail?.cancelVoicemailAndPickup(it) } },
+                                        enabled = voicemail?.canPickUpVoicemail(voicemailCall) == true,
+                                        modifier = Modifier.heightIn(min = 48.dp)
+                                    ) {
+                                        Symbol(DialerSymbol.Phone)
+                                        Text(stringResource(R.string.local_voicemail_pick_up), Modifier.padding(start = 8.dp))
+                                    }
+                                }
+                                AnimatedVisibility(!localVoicemailActive && !dialpad && primaryInfoState.showInCallButtonGrid()) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         val buttons = if (roundedControls) ROUNDED_CONTROL_IDS
                                         else listOf(BUTTON_AUDIO, BUTTON_MUTE, BUTTON_DIALPAD, BUTTON_HOLD,
@@ -368,13 +388,13 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
                     .padding(horizontal = 24.dp).padding(top = 16.dp, bottom = if (roundedControls) 64.dp else 16.dp)) {
                     if (roundedControls) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.Top) {
-                        if (primaryInfoState.showInCallButtonGrid())
+                        if (!localVoicemailActive && primaryInfoState.showInCallButtonGrid())
                             CallControl(BUTTON_AUDIO, Modifier.weight(1f), roundedControls = true)
                         else Spacer(Modifier.weight(1f))
                         HyperOsCallControl(DialerSymbol.EndCall, stringResource(R.string.expressive_end_call),
                             onClick = { endCall() }, enabled = endEnabled,
                             endCall = true, modifier = Modifier.weight(1f))
-                        if (primaryInfoState.showInCallButtonGrid())
+                        if (!localVoicemailActive && primaryInfoState.showInCallButtonGrid())
                             CallControl(BUTTON_DIALPAD, Modifier.weight(1f), roundedControls = true)
                         else Spacer(Modifier.weight(1f))
                     } else ExpressiveTile(onClick = { endCall() }, enabled = endEnabled,
@@ -432,7 +452,17 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
         LaunchedEffect(primaryCallState.state(), primaryCallState.connectTimeMillis()) {
             while (primaryCallState.state() == DialerCallState.ACTIVE) { now = System.currentTimeMillis(); delay(1000) }
         }
-        val status = when (primaryCallState.state()) {
+        val voicemailCall = remember(voicemailRevision, primaryInfoState) {
+            if (answering) null else LocalVoicemailManager.getInstance()?.getVoicemailCall()
+        }
+        val voicemail = LocalVoicemailManager.getInstance()
+        val status = if (voicemail?.isVoicemailActiveForCall(voicemailCall) == true) {
+            stringResource(when {
+                voicemail.isEndingForCall(voicemailCall) -> R.string.local_voicemail_ending_call
+                voicemail.isRecordingForCall(voicemailCall) -> R.string.local_voicemail_recording_notification_text
+                else -> R.string.local_voicemail_playing_greeting
+            })
+        } else when (primaryCallState.state()) {
             DialerCallState.ACTIVE -> DateUtils.formatElapsedTime(((now - primaryCallState.connectTimeMillis()) / 1000).coerceAtLeast(0))
             DialerCallState.INCOMING, DialerCallState.CALL_WAITING -> stringResource(R.string.expressive_incoming_call)
             DialerCallState.ONHOLD -> stringResource(R.string.expressive_on_hold)
@@ -514,6 +544,7 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
         if (id == BUTTON_SWAP && shown[BUTTON_SWAP] != true) BUTTON_SWITCH_TO_SECONDARY else id
 
     private fun isControlEnabled(id: Int): Boolean {
+        if (!answering && LocalVoicemailManager.getInstance()?.getVoicemailCall() != null) return false
         if (!buttonUiReady || !controlsEnabled || !primaryInfoState.showInCallButtonGrid()) return false
         if (dialpad && id != BUTTON_AUDIO && id != BUTTON_DIALPAD && id != BUTTON_SWITCH_TO_SECONDARY) return false
         if (id == ROUNDED_MESSAGE) {

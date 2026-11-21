@@ -32,6 +32,7 @@ import static com.android.incallui.NotificationBroadcastReceiver.ACTION_UNMUTE_O
 import static com.android.incallui.NotificationBroadcastReceiver.ACTION_TURN_OFF_SPEAKER;
 import static com.android.incallui.NotificationBroadcastReceiver.ACTION_TURN_ON_SPEAKER;
 import static com.android.incallui.NotificationBroadcastReceiver.ACTION_SEND_TO_LOCAL_VOICEMAIL;
+import static com.android.incallui.NotificationBroadcastReceiver.ACTION_PICK_UP_LOCAL_VOICEMAIL;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
@@ -423,8 +424,17 @@ public class StatusBarNotifier
         || state == DialerCallState.ONHOLD
         || DialerCallState.isDialing(state)) {
       addHangupAction(builder);
-      addSpeakerAction(builder, callAudioState);
-      addMuteAction(builder, callAudioState);
+      com.android.dialer.localvoicemail.LocalVoicemailManager voicemail =
+          com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+      if (voicemail != null && voicemail.isVoicemailActiveForCall(call)) {
+        if (voicemail.canPickUpVoicemail(call)) {
+          addLocalVoicemailAction(builder, call, ACTION_PICK_UP_LOCAL_VOICEMAIL,
+              R.string.local_voicemail_pick_up);
+        }
+      } else {
+        addSpeakerAction(builder, callAudioState);
+        addMuteAction(builder, callAudioState);
+      }
       builder.addExtras(createHangUpExtras());
     } else if (state == DialerCallState.INCOMING || state == DialerCallState.CALL_WAITING) {
       addDismissAction(builder);
@@ -433,7 +443,9 @@ public class StatusBarNotifier
         builder.addExtras(createIncomingCallExtras(true /* isVideo */));
       } else {
         addAnswerAction(builder);
-        if (com.android.dialer.localvoicemail.LocalVoicemailPreferences.isEnabled(context)) {
+        com.android.dialer.localvoicemail.LocalVoicemailManager voicemail =
+            com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+        if (voicemail != null && voicemail.canSendToVoicemail(call)) {
           addSendToVoicemailAction(builder, call);
         }
         builder.addExtras(createIncomingCallExtras(false /* isVideo */));
@@ -670,6 +682,14 @@ public class StatusBarNotifier
 
   /** Returns the message to use with the notification. */
   private CharSequence getContentString(DialerCall call, @UserType long userType) {
+    com.android.dialer.localvoicemail.LocalVoicemailManager voicemail =
+        com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+    if (voicemail != null && voicemail.isVoicemailActiveForCall(call)) {
+      if (voicemail.isEndingForCall(call)) return context.getText(R.string.local_voicemail_ending_call);
+      return context.getText(voicemail.isRecordingForCall(call)
+          ? R.string.local_voicemail_recording_notification_text
+          : R.string.local_voicemail_playing_greeting);
+    }
     boolean isIncomingOrWaiting =
         call.getState() == DialerCallState.INCOMING
             || call.getState() == DialerCallState.CALL_WAITING;
@@ -820,11 +840,14 @@ public class StatusBarNotifier
   }
 
   private void addSendToVoicemailAction(Notification.Builder builder, DialerCall call) {
-    LogUtil.d(
-        "StatusBarNotifier.addSendToVoicemailAction",
-        "will show \"Send to Voicemail\" action in incoming call Notification");
+    addLocalVoicemailAction(builder, call, ACTION_SEND_TO_LOCAL_VOICEMAIL,
+        R.string.local_voicemail_send_to_voicemail);
+  }
+
+  private void addLocalVoicemailAction(
+      Notification.Builder builder, DialerCall call, String action, int title) {
     Intent intent = new Intent(context, NotificationBroadcastReceiver.class);
-    intent.setAction(ACTION_SEND_TO_LOCAL_VOICEMAIL);
+    intent.setAction(action);
     if (call != null) {
       intent.putExtra(NotificationBroadcastReceiver.EXTRA_CALL_ID, call.getId());
     }
@@ -837,7 +860,7 @@ public class StatusBarNotifier
     builder.addAction(
         new Notification.Action.Builder(
                 Icon.createWithResource(context, R.drawable.quantum_ic_voicemail_vd_theme_24),
-                context.getText(R.string.local_voicemail_send_to_voicemail),
+                context.getText(title),
                 voicemailPendingIntent)
             .build());
   }

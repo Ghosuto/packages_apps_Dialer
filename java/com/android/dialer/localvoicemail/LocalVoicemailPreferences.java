@@ -42,7 +42,7 @@ public final class LocalVoicemailPreferences {
   public static final String FILTER_SAVED_CONTACTS = "saved_contacts";
   public static final String FILTER_UNKNOWN_NUMBERS = "unknown_numbers";
 
-  public static final int DEFAULT_RING_DELAY_SECONDS = 20;
+  public static final int DEFAULT_RING_DELAY_SECONDS = 10;
   public static final int DEFAULT_MAX_DURATION_SECONDS = 60;
 
   private LocalVoicemailPreferences() {}
@@ -103,7 +103,7 @@ public final class LocalVoicemailPreferences {
   public static int getRingDelaySeconds(Context context) {
     String delayStr = getPreferences(context).getString(PREF_RING_DELAY, String.valueOf(DEFAULT_RING_DELAY_SECONDS));
     try {
-      return Integer.parseInt(delayStr);
+      return Math.max(10, Math.min(45, Integer.parseInt(delayStr)));
     } catch (NumberFormatException e) {
       return DEFAULT_RING_DELAY_SECONDS;
     }
@@ -123,7 +123,7 @@ public final class LocalVoicemailPreferences {
   public static int getMaxDurationSeconds(Context context) {
     String durationStr = getPreferences(context).getString(PREF_MAX_DURATION, String.valueOf(DEFAULT_MAX_DURATION_SECONDS));
     try {
-      return Integer.parseInt(durationStr);
+      return Math.max(30, Math.min(120, Integer.parseInt(durationStr)));
     } catch (NumberFormatException e) {
       return DEFAULT_MAX_DURATION_SECONDS;
     }
@@ -191,8 +191,7 @@ public final class LocalVoicemailPreferences {
 
     Boolean savedContact = isSavedContact(context, number);
     if (savedContact == null) {
-      // Permission not granted or user locked, allow screening by default if enabled
-      return true;
+      return false;
     }
 
     if (FILTER_SAVED_CONTACTS.equals(mode)) {

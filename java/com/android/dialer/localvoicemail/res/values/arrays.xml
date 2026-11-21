@@ -17,9 +17,9 @@
 <resources>
     <!-- Ring delay options -->
     <string-array name="local_voicemail_ring_delay_entries">
-        <item>10 seconds</item>
+        <item>10 seconds (Default)</item>
         <item>15 seconds</item>
-        <item>20 seconds (Default)</item>
+        <item>20 seconds</item>
         <item>30 seconds</item>
         <item>45 seconds</item>
     </string-array>

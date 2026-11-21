@@ -33,7 +33,7 @@
             android:summary="@string/local_voicemail_ring_delay_summary"
             android:entries="@array/local_voicemail_ring_delay_entries"
             android:entryValues="@array/local_voicemail_ring_delay_values"
-            android:defaultValue="20" />
+            android:defaultValue="10" />
 
         <ListPreference
             android:key="local_voicemail_max_duration"
@@ -55,6 +55,14 @@
             android:key="local_voicemail_greeting"
             android:title="@string/local_voicemail_greeting_title"
             android:summary="@string/local_voicemail_greeting_summary" />
+
+        <Preference
+            android:key="local_voicemail_record_greeting"
+            android:title="@string/local_voicemail_greeting_record" />
+
+        <Preference
+            android:key="local_voicemail_reset_greeting"
+            android:title="@string/local_voicemail_greeting_reset" />
 
     </PreferenceCategory>
 

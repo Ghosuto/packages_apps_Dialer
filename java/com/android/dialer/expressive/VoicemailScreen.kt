@@ -152,6 +152,7 @@ fun VoicemailScreen(onCallVoicemail: () -> Unit = {}, onSettings: () -> Unit, bo
     }
 
     DisposableEffect(context) {
+        com.android.dialer.localvoicemail.LocalVoicemailManager.retryPendingVoicemails(context)
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) { revision++ }
         }

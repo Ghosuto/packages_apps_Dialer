@@ -74,6 +74,9 @@ public class NotificationBroadcastReceiver extends BroadcastReceiver {
   public static final String ACTION_SEND_TO_LOCAL_VOICEMAIL =
       "com.android.incallui.ACTION_SEND_TO_LOCAL_VOICEMAIL";
 
+  public static final String ACTION_PICK_UP_LOCAL_VOICEMAIL =
+      "com.android.incallui.ACTION_PICK_UP_LOCAL_VOICEMAIL";
+
   public static final String EXTRA_NOTIFICATION_ID =
       "com.android.incallui.extra.EXTRA_NOTIFICATION_ID";
 
@@ -113,6 +116,11 @@ public class NotificationBroadcastReceiver extends BroadcastReceiver {
       TelecomAdapter.getInstance().setAudioRoute(CallAudioState.ROUTE_WIRED_OR_EARPIECE);
     } else if (action.equals(ACTION_SEND_TO_LOCAL_VOICEMAIL)) {
       sendToLocalVoicemail(intent.getStringExtra(EXTRA_CALL_ID));
+    } else if (action.equals(ACTION_PICK_UP_LOCAL_VOICEMAIL)) {
+      DialerCall call = CallList.getInstance().getCallById(intent.getStringExtra(EXTRA_CALL_ID));
+      com.android.dialer.localvoicemail.LocalVoicemailManager manager =
+          com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+      if (call != null && manager != null) manager.cancelVoicemailAndPickup(call);
     }
   }
 
@@ -122,10 +130,7 @@ public class NotificationBroadcastReceiver extends BroadcastReceiver {
       LogUtil.e("NotificationBroadcastReceiver.sendToLocalVoicemail", "call list is null");
       return;
     }
-    DialerCall call = callList.getIncomingCall();
-    if (call == null && callId != null) {
-      call = callList.getCallById(callId);
-    }
+    DialerCall call = callId == null ? null : callList.getCallById(callId);
     if (call != null) {
       com.android.dialer.localvoicemail.LocalVoicemailManager manager =
           com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
@@ -187,7 +192,9 @@ public class NotificationBroadcastReceiver extends BroadcastReceiver {
     } else {
       DialerCall call = callList.getIncomingCall();
       if (call != null) {
-
+        com.android.dialer.localvoicemail.LocalVoicemailManager voicemail =
+            com.android.dialer.localvoicemail.LocalVoicemailManager.getInstance();
+        if (voicemail != null) voicemail.onUserAnswer(call);
         Futures.addCallback(
             Futures.immediateFuture(null),
             new FutureCallback<Void>() {

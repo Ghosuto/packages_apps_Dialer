@@ -22,6 +22,7 @@
         <permission name="android.permission.CAPTURE_VOICE_COMMUNICATION_OUTPUT"/>
         <permission name="android.permission.BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION"/>
         <permission name="android.permission.MODIFY_AUDIO_ROUTING"/>
+        <permission name="android.permission.CALL_AUDIO_INTERCEPTION"/>
         <permission name="android.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS"/>
         <permission name="android.permission.RECEIVE_SMS"/>
     </privapp-permissions>

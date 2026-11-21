@@ -16,827 +16,370 @@
 
 package com.android.dialer.localvoicemail;
 
-import android.content.ContentValues;
+import android.Manifest;
 import android.content.Context;
-import android.content.res.AssetFileDescriptor;
-import android.media.AudioAttributes;
-import android.media.AudioDeviceInfo;
+import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
-import android.media.MediaPlayer;
-import android.media.MediaRecorder;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
-import android.provider.VoicemailContract.Voicemails;
+import android.os.SystemClock;
+import android.os.UserManager;
 import android.telecom.PhoneAccountHandle;
-import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.dialer.R;
-import com.android.incallui.call.TelecomAdapter;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-public class LocalVoicemailAudioController {
+/** Sends audio to the call uplink and records only the call downlink. */
+public final class LocalVoicemailAudioController {
   private static final String TAG = "LocalVoicemailAudio";
-  private static final String TEMP_RECORDING_NAME = "local_voicemail_temp.wav";
-  private static final int SAMPLE_RATE = 16000;
+  static final int SAMPLE_RATE = 16000;
+  static final int BYTES_PER_SECOND = SAMPLE_RATE * 2;
+  static final int MAX_GREETING_SECONDS = 30;
 
   public interface AudioControllerCallback {
     void onGreetingStarted();
     void onRecordingStarted();
-    void onRecordingCompleted(File recordedFile, long durationSeconds);
-    void onError(String message, Exception e);
+    void onRecordingCompleted(@Nullable File recordedFile, long durationSeconds);
+    void onError(String message, Exception exception);
   }
 
   private final Context mContext;
   private final AudioManager mAudioManager;
   private final Handler mMainHandler = new Handler(Looper.getMainLooper());
-
-  private MediaPlayer mMediaPlayer;
-  private AudioTrack mAudioTrack;
-  private AudioRecord mAudioRecord;
-  private Thread mRecordingThread;
-  private File mTempRecordingFile;
-
-  private boolean mIsSessionActive = false;
-  private volatile boolean mIsPlayingGreeting = false;
-  private volatile boolean mIsRecording = false;
-
-  private Runnable mMaxDurationTimeoutRunnable;
-  private AudioControllerCallback mCallback;
+  private final ExecutorService mWorker = Executors.newSingleThreadExecutor();
+  private Session mSession;
 
   public LocalVoicemailAudioController(@NonNull Context context) {
     mContext = context.getApplicationContext();
-    mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+    mAudioManager = mContext.getSystemService(AudioManager.class);
+  }
+
+  public static boolean isSupported(Context context) {
+    return context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+        == PackageManager.PERMISSION_GRANTED && hasCallAudioSupport(context);
+  }
+
+  public static boolean hasCallAudioSupport(Context context) {
+    UserManager users = context.getSystemService(UserManager.class);
+    if (users != null && !users.isUserUnlocked()) return false;
+    for (String permission : new String[] {
+        Manifest.permission.CALL_AUDIO_INTERCEPTION,
+        Manifest.permission.MODIFY_AUDIO_ROUTING}) {
+      if (context.checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) return false;
+    }
+    AudioManager audio = context.getSystemService(AudioManager.class);
+    try {
+      return audio != null && audio.isPstnCallAudioInterceptable();
+    } catch (RuntimeException exception) {
+      Log.w(TAG, "Call audio interception is unavailable", exception);
+      return false;
+    }
+  }
+
+  public synchronized boolean isSessionBusy() {
+    return mSession != null;
   }
 
   public synchronized void startVoicemailSession(
-      @NonNull String callerNumber,
-      int maxDurationSeconds,
-      @Nullable AudioControllerCallback callback) {
-    if (mIsSessionActive) {
-      stopSessionAndNotify();
-    }
-    mIsSessionActive = true;
-    mCallback = callback;
-
-    silenceLocalAudio();
-
-    // 1. Play greeting prompt to the caller first
-    playGreetingPrompt(maxDurationSeconds);
-
-    // 2. Arm safety timeout in case greeting hangs or fails silently
-    mMaxDurationTimeoutRunnable = () -> {
-      Log.i(TAG, "Voicemail safety timeout reached (" + (maxDurationSeconds + 30) + "s)");
-      stopSessionAndNotify();
-    };
-    mMainHandler.postDelayed(mMaxDurationTimeoutRunnable, (maxDurationSeconds + 30L) * 1000L);
+      @NonNull String callerNumber, int maxDurationSeconds,
+      @Nullable PhoneAccountHandle account, @NonNull AudioControllerCallback callback) {
+    if (mSession != null) throw new IllegalStateException("A voicemail session is still finishing");
+    Session session = new Session(callerNumber, maxDurationSeconds, account, callback);
+    mSession = session;
+    mWorker.execute(() -> runSession(session));
   }
 
-  private void silenceLocalAudio() {
-    try {
-      if (mAudioManager != null) {
-        mAudioManager.setMicrophoneMute(true);
+  /** Cancellation never joins an audio thread on the main thread. */
+  public synchronized void stopSessionAndNotify() {
+    if (mSession == null) return;
+    Session session = mSession;
+    session.stopped = true;
+    synchronized (session) {
+      if (session.track != null) {
+        try {
+          session.track.pause();
+          session.track.flush();
+        } catch (IllegalStateException ignored) { }
       }
-      TelecomAdapter.getInstance().mute(true);
-    } catch (Exception e) {
-      Log.w(TAG, "Failed to silence local audio: " + e.getMessage());
     }
   }
 
-  private void restoreLocalAudio() {
+  private void runSession(Session session) {
+    File message = null;
+    Exception failure = null;
+    long duration = 0;
     try {
-      if (mAudioManager != null) {
-        mAudioManager.setMicrophoneMute(false);
+      byte[] greeting = readGreeting();
+      if (session.stopped) return;
+      AudioFormat output = new AudioFormat.Builder()
+          .setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(SAMPLE_RATE)
+          .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
+      AudioFormat input = new AudioFormat.Builder()
+          .setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(SAMPLE_RATE)
+          .setChannelMask(AudioFormat.CHANNEL_IN_MONO).build();
+      AudioTrack track = mAudioManager.getCallUplinkInjectionAudioTrack(output);
+      synchronized (session) { session.track = track; }
+      if (session.stopped) return;
+      AudioRecord record = mAudioManager.getCallDownlinkExtractionAudioRecord(input);
+      synchronized (session) { session.record = record; }
+      if (session.stopped) return;
+      if (session.track.getState() != AudioTrack.STATE_INITIALIZED
+          || session.record.getState() != AudioRecord.STATE_INITIALIZED) {
+        throw new IOException("Unable to initialize call audio interception");
       }
-      TelecomAdapter.getInstance().mute(false);
-    } catch (Exception e) {
-      Log.w(TAG, "Failed to restore local audio: " + e.getMessage());
+      postProgress(session, true);
+      playGreeting(session, greeting);
+      if (session.stopped) return;
+      message = recordMessage(session);
+      if (message != null) {
+        duration = Math.max(1, (message.length() - 44) / BYTES_PER_SECOND);
+        LocalVoicemailStore.stage(mContext, session.number, duration, session.account, message);
+      }
+    } catch (Exception exception) {
+      failure = exception;
+      Log.e(TAG, "Voicemail audio session failed", exception);
+    } finally {
+      releaseAudio(session);
+      File completedMessage = message;
+      long completedDuration = duration;
+      Exception completedFailure = failure;
+      mMainHandler.post(() -> {
+        synchronized (LocalVoicemailAudioController.this) {
+          if (mSession == session) mSession = null;
+        }
+        if (completedFailure != null && !session.stopped) {
+          session.callback.onError("Unable to record local voicemail", completedFailure);
+        } else {
+          session.callback.onRecordingCompleted(completedMessage, completedDuration);
+        }
+      });
+    }
+  }
+
+  private byte[] readGreeting() throws IOException {
+    String path = LocalVoicemailPreferences.getCustomGreetingPath(mContext);
+    if (path != null && new File(path).isFile()) {
+      try (InputStream input = new FileInputStream(path)) {
+        byte[] pcm = readPcmDataFromWav(input);
+        byte[] greeting = new byte[pcm.length + SAMPLE_RATE * 2 / 5];
+        System.arraycopy(pcm, 0, greeting, 0, pcm.length);
+        for (int frame = 0; frame < SAMPLE_RATE / 5; frame++) {
+          short sample = (short) (Math.sin(frame * 2 * Math.PI * 880 / SAMPLE_RATE) * 10000);
+          greeting[pcm.length + frame * 2] = (byte) sample;
+          greeting[pcm.length + frame * 2 + 1] = (byte) (sample >> 8);
+        }
+        return greeting;
+      }
+    }
+    try (InputStream input = mContext.getResources()
+        .openRawResource(R.raw.local_voicemail_default_greeting_wav)) {
+      return readPcmDataFromWav(input);
+    }
+  }
+
+  private void playGreeting(Session session, byte[] pcm) throws IOException, InterruptedException {
+    AudioTrack track = session.track;
+    synchronized (session) {
+      if (session.stopped) return;
+      track.setVolume(1f);
+      track.play();
+    }
+    long deadline = SystemClock.elapsedRealtime() + pcm.length * 1000L / BYTES_PER_SECOND + 5000;
+    int offset = 0;
+    while (!session.stopped && offset < pcm.length) {
+      if (SystemClock.elapsedRealtime() >= deadline) throw new IOException("Greeting timed out");
+      int written = track.write(pcm, offset, Math.min(4096, pcm.length - offset),
+          AudioTrack.WRITE_NON_BLOCKING);
+      if (written < 0) throw new IOException("Greeting write failed: " + written);
+      offset += written;
+      if (written == 0) Thread.sleep(10);
+    }
+    while (!session.stopped && track.getPlaybackHeadPosition() < pcm.length / 2) {
+      if (SystemClock.elapsedRealtime() >= deadline) throw new IOException("Greeting did not finish");
+      Thread.sleep(10);
+    }
+    synchronized (session) {
+      if (!session.stopped) track.stop();
     }
   }
 
   @Nullable
-  private AudioDeviceInfo findTelephonyAudioDevice() {
-    if (mAudioManager == null) return null;
-    AudioDeviceInfo[] outputDevices = mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-    if (outputDevices != null) {
-      for (AudioDeviceInfo device : outputDevices) {
-        if (device.getType() == AudioDeviceInfo.TYPE_TELEPHONY) {
-          return device;
+  private File recordMessage(Session session) throws IOException, InterruptedException {
+    File file = File.createTempFile("local_voicemail_", ".wav", mContext.getFilesDir());
+    boolean valid = false;
+    long bytes = 0;
+    boolean hasAudio = false;
+    try (RandomAccessFile output = new RandomAccessFile(file, "rw")) {
+      writeWavHeader(output, 0);
+      synchronized (session) {
+        if (session.stopped) return null;
+        session.record.startRecording();
+      }
+      if (session.record.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+        throw new IOException("Call capture did not start");
+      }
+      postProgress(session, false);
+      long maxBytes = (long) session.maxDuration * BYTES_PER_SECOND;
+      long deadline = SystemClock.elapsedRealtime() + session.maxDuration * 1000L;
+      byte[] buffer = new byte[2048];
+      while (!session.stopped && bytes < maxBytes && SystemClock.elapsedRealtime() < deadline) {
+        int size = (int) Math.min(buffer.length, maxBytes - bytes);
+        int read;
+        try {
+          read = session.record.read(buffer, 0, size, AudioRecord.READ_NON_BLOCKING);
+        } catch (IllegalStateException exception) {
+          if (bytes > 0 || session.stopped) break;
+          throw exception;
         }
-      }
-    }
-    return null;
-  }
-
-  @Nullable
-  private AudioDeviceInfo findTelephonyRxAudioDevice() {
-    if (mAudioManager == null) return null;
-    AudioDeviceInfo[] inputDevices = mAudioManager.getDevices(AudioManager.GET_DEVICES_INPUTS);
-    if (inputDevices != null) {
-      for (AudioDeviceInfo device : inputDevices) {
-        if (device.getType() == AudioDeviceInfo.TYPE_TELEPHONY) {
-          return device;
+        if (read < 0) {
+          if (bytes == 0 && !session.stopped) throw new IOException("Call capture read failed: " + read);
+          break;
         }
+        if (read == 0) {
+          Thread.sleep(10);
+          continue;
+        }
+        if ((read & 1) != 0) throw new IOException("Incomplete PCM frame from call capture");
+        output.write(buffer, 0, read);
+        bytes += read;
+        for (int i = 0; i < read && !hasAudio; i++) hasAudio = buffer[i] != 0;
       }
+      writeWavHeader(output, bytes);
+      output.getFD().sync();
+      valid = bytes > 0 && hasAudio;
+      return valid ? file : null;
+    } finally {
+      if (!valid) file.delete();
     }
-    return null;
   }
 
-  private void playGreetingPrompt(final int maxDurationSeconds) {
-    stopPlayback();
-    mIsPlayingGreeting = true;
-    if (mCallback != null) {
-      mCallback.onGreetingStarted();
-    }
-
-    new Thread(() -> {
-      boolean success = false;
-      String customPath = LocalVoicemailPreferences.getCustomGreetingPath(mContext);
-      boolean hasCustomGreeting = customPath != null && new File(customPath).exists();
-
-      if (!hasCustomGreeting && mIsPlayingGreeting) {
-        success = playPcmGreetingViaAudioTrack();
+  private void postProgress(Session session, boolean greeting) {
+    mMainHandler.post(() -> {
+      synchronized (LocalVoicemailAudioController.this) {
+        if (mSession != session || session.stopped) return;
       }
-
-      if (!success && mIsPlayingGreeting) {
-        Log.i(TAG, "AudioTrack injection failed or custom greeting used; falling back to MediaPlayer");
-        mMainHandler.post(() -> playGreetingViaMediaPlayer(maxDurationSeconds));
-      } else if (success) {
-        Log.i(TAG, "Greeting prompt playback completed successfully");
-        stopPlayback();
-        mMainHandler.post(() -> {
-          if (mIsSessionActive) {
-            startDownlinkRecording(maxDurationSeconds);
-          }
-        });
-      } else {
-        stopPlayback();
-      }
-    }, "LocalVoicemailGreeting").start();
+      if (greeting) session.callback.onGreetingStarted();
+      else session.callback.onRecordingStarted();
+    });
   }
 
-  private static byte[] readPcmDataFromWav(InputStream is) throws IOException {
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    byte[] buf = new byte[8192];
-    int n;
-    while ((n = is.read(buf)) != -1) {
-      baos.write(buf, 0, n);
+  private static void releaseAudio(Session session) {
+    synchronized (session) {
+      if (session.record != null) {
+        try { session.record.stop(); } catch (IllegalStateException ignored) { }
+        try { session.record.release(); } catch (RuntimeException ignored) { }
+        session.record = null;
+      }
+      if (session.track != null) {
+        try { session.track.stop(); } catch (IllegalStateException ignored) { }
+        try { session.track.release(); } catch (RuntimeException ignored) { }
+        session.track = null;
+      }
     }
-    byte[] fileData = baos.toByteArray();
-    for (int i = 0; i < fileData.length - 8; i++) {
-      if (fileData[i] == 'd' && fileData[i + 1] == 'a'
-          && fileData[i + 2] == 't' && fileData[i + 3] == 'a') {
-        int pcmStart = i + 8;
-        int pcmLength = fileData.length - pcmStart;
-        byte[] pcm = new byte[pcmLength];
-        System.arraycopy(fileData, pcmStart, pcm, 0, pcmLength);
+  }
+
+  /** Reads RIFF chunks instead of searching for a "data" byte sequence inside arbitrary audio. */
+  static byte[] readPcmDataFromWav(InputStream input) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    byte[] buffer = new byte[8192];
+    int read;
+    int limit = MAX_GREETING_SECONDS * BYTES_PER_SECOND + 65536;
+    while ((read = input.read(buffer)) != -1) {
+      if (output.size() + read > limit) throw new IOException("Greeting is too large");
+      output.write(buffer, 0, read);
+    }
+    byte[] wav = output.toByteArray();
+    if (wav.length < 12 || !chunkEquals(wav, 0, "RIFF") || !chunkEquals(wav, 8, "WAVE")) {
+      throw new IOException("Greeting must be a PCM WAV file");
+    }
+    boolean supportedFormat = false;
+    for (int offset = 12; offset <= wav.length - 8; ) {
+      long length = unsignedInt(wav, offset + 4);
+      int start = offset + 8;
+      if (length > wav.length - start) throw new IOException("Truncated WAV chunk");
+      if (chunkEquals(wav, offset, "fmt ")) {
+        supportedFormat = length >= 16 && unsignedShort(wav, start) == 1
+            && unsignedShort(wav, start + 2) == 1
+            && unsignedInt(wav, start + 4) == SAMPLE_RATE
+            && unsignedShort(wav, start + 12) == 2 && unsignedShort(wav, start + 14) == 16;
+      } else if (chunkEquals(wav, offset, "data")) {
+        if (!supportedFormat || length == 0 || (length & 1) != 0
+            || length > MAX_GREETING_SECONDS * BYTES_PER_SECOND) {
+          throw new IOException("Greeting must be 16 kHz mono PCM16 and at most 30 seconds");
+        }
+        byte[] pcm = new byte[(int) length];
+        System.arraycopy(wav, start, pcm, 0, pcm.length);
         return pcm;
       }
+      offset = start + (int) length + ((int) length & 1);
     }
-    return fileData;
+    throw new IOException("Greeting contains no PCM data");
   }
 
-  public static byte[] convertMonoToStereo(byte[] monoPcm) {
-    if (monoPcm == null) return new byte[0];
-    byte[] stereoPcm = new byte[monoPcm.length * 2];
-    for (int i = 0; i < monoPcm.length; i += 2) {
-      byte b0 = monoPcm[i];
-      byte b1 = (i + 1 < monoPcm.length) ? monoPcm[i + 1] : 0;
-      int outIdx = i * 2;
-      stereoPcm[outIdx] = b0;
-      stereoPcm[outIdx + 1] = b1;
-      stereoPcm[outIdx + 2] = b0;
-      stereoPcm[outIdx + 3] = b1;
-    }
-    return stereoPcm;
+  private static boolean chunkEquals(byte[] data, int offset, String chunk) {
+    for (int i = 0; i < 4; i++) if (data[offset + i] != chunk.charAt(i)) return false;
+    return true;
   }
 
-  private boolean playPcmGreetingViaAudioTrack() {
-    AudioTrack track = null;
-    try (InputStream is =
-             mContext.getResources().openRawResource(R.raw.local_voicemail_default_greeting_wav)) {
-      byte[] monoPcm = readPcmDataFromWav(is);
-      if (monoPcm == null || monoPcm.length == 0) {
-        Log.e(TAG, "Failed to read PCM data from default greeting WAV");
-        return false;
-      }
-
-      byte[] stereoPcm = convertMonoToStereo(monoPcm);
-      AudioDeviceInfo telephonyDevice = findTelephonyAudioDevice();
-      Log.i(TAG, "playPcmGreetingViaAudioTrack: telephonyDevice="
-          + (telephonyDevice != null ? telephonyDevice.getProductName() : "null"));
-
-      AudioAttributes commAttributes =
-          new AudioAttributes.Builder()
-              .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-              .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-              .build();
-
-      AudioFormat stereoFormat =
-          new AudioFormat.Builder()
-              .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-              .setSampleRate(SAMPLE_RATE)
-              .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-              .build();
-
-      int minBufferSize = AudioTrack.getMinBufferSize(
-          SAMPLE_RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
-      int bufferSize = Math.max(minBufferSize * 2, 16384);
-
-      AudioTrack.Builder builder = new AudioTrack.Builder()
-          .setAudioAttributes(commAttributes)
-          .setAudioFormat(stereoFormat)
-          .setBufferSizeInBytes(bufferSize)
-          .setTransferMode(AudioTrack.MODE_STREAM);
-
-      try {
-        track = builder.build();
-        if (track != null && track.getState() == AudioTrack.STATE_INITIALIZED && telephonyDevice != null) {
-          track.setPreferredDevice(telephonyDevice);
-        }
-      } catch (Exception e) {
-        Log.w(TAG, "Failed to build preferred telephony AudioTrack: " + e.getMessage());
-      }
-
-      if (track == null || track.getState() != AudioTrack.STATE_INITIALIZED) {
-        if (track != null) {
-          track.release();
-          track = null;
-        }
-        try {
-          track = new AudioTrack.Builder()
-              .setAudioAttributes(commAttributes)
-              .setAudioFormat(new AudioFormat.Builder()
-                  .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                  .setSampleRate(SAMPLE_RATE)
-                  .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                  .build())
-              .setBufferSizeInBytes(bufferSize)
-              .setTransferMode(AudioTrack.MODE_STREAM)
-              .build();
-        } catch (Exception e) {
-          Log.w(TAG, "Fallback AudioTrack build failed: " + e.getMessage());
-        }
-      }
-
-      if (track == null || track.getState() != AudioTrack.STATE_INITIALIZED) {
-        Log.e(TAG, "Could not initialize AudioTrack for greeting playback");
-        return false;
-      }
-
-      synchronized (this) {
-        if (!mIsPlayingGreeting) {
-          track.release();
-          return false;
-        }
-        mAudioTrack = track;
-      }
-
-      try {
-        track.setVolume(1.0f);
-      } catch (Exception ignored) {}
-
-      track.play();
-
-      byte[] dataToWrite = (track.getChannelCount() == 2) ? stereoPcm : monoPcm;
-      int offset = 0;
-      int chunkSize = 4096;
-      while (offset < dataToWrite.length && mIsPlayingGreeting) {
-        int bytesToWrite = Math.min(chunkSize, dataToWrite.length - offset);
-        int written = track.write(dataToWrite, offset, bytesToWrite);
-        if (written <= 0) {
-          Log.w(TAG, "AudioTrack.write returned " + written);
-          break;
-        }
-        offset += written;
-      }
-
-      int frameSize = track.getChannelCount() * 2;
-      int totalFrames = dataToWrite.length / frameSize;
-      long playStart = System.currentTimeMillis();
-      long maxWaitMs = ((long) totalFrames * 1000L / SAMPLE_RATE) + 800L;
-      while (mIsPlayingGreeting && track.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) {
-        if (track.getPlaybackHeadPosition() >= totalFrames) {
-          break;
-        }
-        if (System.currentTimeMillis() - playStart > maxWaitMs) {
-          break;
-        }
-        try {
-          Thread.sleep(50);
-        } catch (InterruptedException ignored) {}
-      }
-
-      // Small delay after tone playback completes to let the beep finish ringing out
-      try {
-        Thread.sleep(150);
-      } catch (InterruptedException ignored) {}
-
-      return offset >= dataToWrite.length;
-    } catch (Exception e) {
-      Log.e(TAG, "playPcmGreetingViaAudioTrack failed: " + e.getMessage(), e);
-      return false;
-    } finally {
-      if (track != null) {
-        try {
-          track.stop();
-          track.release();
-        } catch (Exception ignored) {}
-        synchronized (this) {
-          if (mAudioTrack == track) {
-            mAudioTrack = null;
-          }
-        }
-      }
-    }
+  private static int unsignedShort(byte[] data, int offset) {
+    return (data[offset] & 255) | ((data[offset + 1] & 255) << 8);
   }
 
-  private void playGreetingViaMediaPlayer(final int maxDurationSeconds) {
-    boolean acousticRouting = false;
-    try {
-      mMediaPlayer = new MediaPlayer();
-      mMediaPlayer.setAudioAttributes(
-          new AudioAttributes.Builder()
-              .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-              .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-              .build());
-
-      AudioDeviceInfo telephonyDevice = findTelephonyAudioDevice();
-      if (telephonyDevice != null) {
-        Log.i(TAG, "Routing MediaPlayer greeting to telephony device: " + telephonyDevice.getProductName());
-        mMediaPlayer.setPreferredDevice(telephonyDevice);
-      } else {
-        Log.w(TAG, "No telephony device found; activating acoustic coupling for greeting");
-        try {
-          mAudioManager.setSpeakerphoneOn(true);
-          mAudioManager.setMicrophoneMute(false);
-          acousticRouting = true;
-        } catch (Exception e) {
-          Log.w(TAG, "Failed to enable speakerphone: " + e.getMessage());
-        }
-      }
-
-      final boolean wasAcoustic = acousticRouting;
-
-      String customPath = LocalVoicemailPreferences.getCustomGreetingPath(mContext);
-      if (customPath != null && new File(customPath).exists()) {
-        mMediaPlayer.setDataSource(customPath);
-      } else {
-        try (AssetFileDescriptor afd =
-                 mContext.getResources().openRawResourceFd(R.raw.local_voicemail_default_greeting)) {
-          if (afd != null) {
-            mMediaPlayer.setDataSource(
-                afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
-          }
-        }
-      }
-
-      mMediaPlayer.setVolume(1.0f, 1.0f);
-      mMediaPlayer.setOnCompletionListener(mp -> {
-        Log.i(TAG, "MediaPlayer greeting playback completed");
-        if (wasAcoustic) {
-          try {
-            mAudioManager.setSpeakerphoneOn(false);
-            mAudioManager.setMicrophoneMute(true);
-          } catch (Exception ignored) {}
-        }
-        stopPlayback();
-        if (mIsSessionActive) {
-          startDownlinkRecording(maxDurationSeconds);
-        }
-      });
-
-      mMediaPlayer.setOnErrorListener((mp, what, extra) -> {
-        Log.e(TAG, "MediaPlayer error: what=" + what + ", extra=" + extra);
-        if (wasAcoustic) {
-          try {
-            mAudioManager.setSpeakerphoneOn(false);
-            mAudioManager.setMicrophoneMute(true);
-          } catch (Exception ignored) {}
-        }
-        stopPlayback();
-        if (mIsSessionActive) {
-          startDownlinkRecording(maxDurationSeconds);
-        }
-        return true;
-      });
-
-      mMediaPlayer.prepare();
-      mMediaPlayer.start();
-    } catch (Exception e) {
-      Log.e(TAG, "Failed to play greeting via MediaPlayer: " + e.getMessage(), e);
-      if (acousticRouting) {
-        try {
-          mAudioManager.setSpeakerphoneOn(false);
-          mAudioManager.setMicrophoneMute(true);
-        } catch (Exception ignored) {}
-      }
-      stopPlayback();
-      if (mIsSessionActive) {
-        startDownlinkRecording(maxDurationSeconds);
-      }
-    }
+  private static long unsignedInt(byte[] data, int offset) {
+    return (unsignedShort(data, offset) | ((long) unsignedShort(data, offset + 2) << 16));
   }
 
-  private synchronized void startDownlinkRecording(int maxDurationSeconds) {
-    if (!mIsSessionActive || mIsRecording) {
-      return;
-    }
-    stopRecordingThread();
-
-    // Re-arm max recording duration timeout so the caller has the full configured duration
-    if (mMaxDurationTimeoutRunnable != null) {
-      mMainHandler.removeCallbacks(mMaxDurationTimeoutRunnable);
-    }
-    mMaxDurationTimeoutRunnable = () -> {
-      Log.i(TAG, "Max recording duration reached (" + maxDurationSeconds + "s)");
-      stopSessionAndNotify();
-    };
-    mMainHandler.postDelayed(mMaxDurationTimeoutRunnable, maxDurationSeconds * 1000L);
-
-    mTempRecordingFile = new File(mContext.getFilesDir(), TEMP_RECORDING_NAME);
-    if (mTempRecordingFile.exists()) {
-      mTempRecordingFile.delete();
-    }
-
-    mIsRecording = true;
-    if (mCallback != null) {
-      mCallback.onRecordingStarted();
-    }
-
-    mRecordingThread =
-        new Thread(() -> recordDownlinkAudio(maxDurationSeconds), "LocalVoicemailRecording");
-    mRecordingThread.start();
+  static void writeWavHeader(RandomAccessFile output, long length) throws IOException {
+    output.seek(0);
+    output.writeBytes("RIFF");
+    writeLittleEndian(output, length + 36, 4);
+    output.writeBytes("WAVEfmt ");
+    writeLittleEndian(output, 16, 4);
+    writeLittleEndian(output, 1, 2);
+    writeLittleEndian(output, 1, 2);
+    writeLittleEndian(output, SAMPLE_RATE, 4);
+    writeLittleEndian(output, BYTES_PER_SECOND, 4);
+    writeLittleEndian(output, 2, 2);
+    writeLittleEndian(output, 16, 2);
+    output.writeBytes("data");
+    writeLittleEndian(output, length, 4);
   }
 
-  private void recordDownlinkAudio(int maxDurationSeconds) {
-    AudioRecord record = null;
-    AudioFormat formatIn =
-        new AudioFormat.Builder()
-            .setSampleRate(SAMPLE_RATE)
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-            .build();
-
-    int minBuf = AudioRecord.getMinBufferSize(
-        SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-    int bufferSize = Math.max(minBuf * 2, 8192);
-
-    // Tier 1: Android 16 getCallDownlinkExtractionAudioRecord
-    try {
-      record = mAudioManager.getCallDownlinkExtractionAudioRecord(formatIn);
-      if (record != null && record.getState() == AudioRecord.STATE_INITIALIZED) {
-        Log.i(TAG, "AudioRecord initialized via getCallDownlinkExtractionAudioRecord");
-      } else {
-        if (record != null) record.release();
-        record = null;
-      }
-    } catch (Throwable t) {
-      Log.w(TAG, "getCallDownlinkExtractionAudioRecord failed: " + t.getMessage());
-    }
-
-    // Tier 2: MediaRecorder.AudioSource.VOICE_DOWNLINK
-    if (record == null) {
-      try {
-        record = new AudioRecord.Builder()
-            .setAudioSource(MediaRecorder.AudioSource.VOICE_DOWNLINK)
-            .setAudioFormat(formatIn)
-            .setBufferSizeInBytes(bufferSize)
-            .build();
-        if (record.getState() == AudioRecord.STATE_INITIALIZED) {
-          Log.i(TAG, "AudioRecord initialized via VOICE_DOWNLINK");
-        } else {
-          record.release();
-          record = null;
-        }
-      } catch (Throwable t) {
-        Log.w(TAG, "VOICE_DOWNLINK AudioRecord failed: " + t.getMessage());
-      }
-    }
-
-    // Tier 3: MediaRecorder.AudioSource.VOICE_CALL
-    if (record == null) {
-      try {
-        record = new AudioRecord.Builder()
-            .setAudioSource(MediaRecorder.AudioSource.VOICE_CALL)
-            .setAudioFormat(formatIn)
-            .setBufferSizeInBytes(bufferSize)
-            .build();
-        if (record.getState() == AudioRecord.STATE_INITIALIZED) {
-          Log.i(TAG, "AudioRecord initialized via VOICE_CALL");
-        } else {
-          record.release();
-          record = null;
-        }
-      } catch (Throwable t) {
-        Log.w(TAG, "VOICE_CALL AudioRecord failed: " + t.getMessage());
-      }
-    }
-
-    // Tier 4: MediaRecorder.AudioSource.VOICE_COMMUNICATION
-    if (record == null) {
-      try {
-        record = new AudioRecord.Builder()
-            .setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            .setAudioFormat(formatIn)
-            .setBufferSizeInBytes(bufferSize)
-            .build();
-        if (record.getState() == AudioRecord.STATE_INITIALIZED) {
-          Log.i(TAG, "AudioRecord initialized via VOICE_COMMUNICATION");
-        } else {
-          record.release();
-          record = null;
-        }
-      } catch (Throwable t) {
-        Log.w(TAG, "VOICE_COMMUNICATION AudioRecord failed: " + t.getMessage());
-      }
-    }
-
-    // Tier 5: MediaRecorder.AudioSource.MIC
-    if (record == null) {
-      try {
-        record = new AudioRecord.Builder()
-            .setAudioSource(MediaRecorder.AudioSource.MIC)
-            .setAudioFormat(formatIn)
-            .setBufferSizeInBytes(bufferSize)
-            .build();
-        if (record.getState() == AudioRecord.STATE_INITIALIZED) {
-          Log.i(TAG, "AudioRecord initialized via MIC");
-        } else {
-          record.release();
-          record = null;
-        }
-      } catch (Throwable t) {
-        Log.e(TAG, "MIC AudioRecord failed: " + t.getMessage());
-      }
-    }
-
-    if (record == null) {
-      Log.e(TAG, "All AudioRecord sources failed to initialize");
-      if (mCallback != null) {
-        mCallback.onError("Unable to initialize audio capture for voicemail", null);
-      }
-      return;
-    }
-
-    AudioDeviceInfo rxDevice = findTelephonyRxAudioDevice();
-    if (rxDevice != null) {
-      try {
-        record.setPreferredDevice(rxDevice);
-        Log.i(TAG, "AudioRecord preferred device set to telephony RX: " + rxDevice.getProductName());
-      } catch (Exception ignored) {}
-    }
-
-    synchronized (this) {
-      mAudioRecord = record;
-    }
-
-    long totalBytesWritten = 0;
-    try (RandomAccessFile raf = new RandomAccessFile(mTempRecordingFile, "rw")) {
-      byte[] emptyHeader = new byte[44];
-      raf.write(emptyHeader);
-
-      record.startRecording();
-      byte[] buffer = new byte[2048];
-      long startTime = System.currentTimeMillis();
-      long maxDurationMs = maxDurationSeconds * 1000L;
-
-      while (mIsRecording && (System.currentTimeMillis() - startTime < maxDurationMs)) {
-        int read = record.read(buffer, 0, buffer.length);
-        if (read > 0) {
-          raf.write(buffer, 0, read);
-          totalBytesWritten += read;
-        } else if (read < 0) {
-          Log.w(TAG, "AudioRecord.read error: " + read);
-          break;
-        }
-      }
-
-      writeWavHeader(raf, totalBytesWritten, SAMPLE_RATE, 1, 16);
-      Log.i(TAG, "Voicemail recording complete: total PCM bytes=" + totalBytesWritten
-          + " (approx " + (totalBytesWritten / 32000.0) + "s)");
-    } catch (IOException e) {
-      Log.e(TAG, "Error writing voicemail audio: " + e.getMessage(), e);
-    } finally {
-      try {
-        record.stop();
-        record.release();
-      } catch (Exception ignored) {}
-      synchronized (this) {
-        if (mAudioRecord == record) {
-          mAudioRecord = null;
-        }
-      }
-    }
-  }
-
-  private static void writeWavHeader(
-      RandomAccessFile raf, long audioLength, int sampleRate, int channels, int bitsPerSample)
+  private static void writeLittleEndian(RandomAccessFile output, long value, int bytes)
       throws IOException {
-    long byteRate = (long) sampleRate * channels * (bitsPerSample / 8);
-    int blockAlign = channels * (bitsPerSample / 8);
-    long totalDataLen = audioLength + 36;
-
-    raf.seek(0);
-    raf.writeBytes("RIFF");
-    raf.write(intToLittleEndian((int) totalDataLen));
-    raf.writeBytes("WAVE");
-    raf.writeBytes("fmt ");
-    raf.write(intToLittleEndian(16)); // Subchunk1Size for PCM
-    raf.write(shortToLittleEndian((short) 1)); // AudioFormat: 1 = PCM
-    raf.write(shortToLittleEndian((short) channels));
-    raf.write(intToLittleEndian(sampleRate));
-    raf.write(intToLittleEndian((int) byteRate));
-    raf.write(shortToLittleEndian((short) blockAlign));
-    raf.write(shortToLittleEndian((short) bitsPerSample));
-    raf.writeBytes("data");
-    raf.write(intToLittleEndian((int) audioLength));
+    for (int i = 0; i < bytes; i++) output.write((int) (value >> (i * 8)) & 255);
   }
 
-  private static byte[] intToLittleEndian(int value) {
-    return new byte[] {
-      (byte) (value & 0xff),
-      (byte) ((value >> 8) & 0xff),
-      (byte) ((value >> 16) & 0xff),
-      (byte) ((value >> 24) & 0xff)
-    };
-  }
+  private static final class Session {
+    final String number;
+    final int maxDuration;
+    final PhoneAccountHandle account;
+    final AudioControllerCallback callback;
+    volatile boolean stopped;
+    AudioTrack track;
+    AudioRecord record;
 
-  private static byte[] shortToLittleEndian(short value) {
-    return new byte[] {
-      (byte) (value & 0xff),
-      (byte) ((value >> 8) & 0xff)
-    };
-  }
-
-  public void stopSessionAndNotify() {
-    synchronized (this) {
-      if (!mIsSessionActive) {
-        return;
-      }
-      mIsSessionActive = false;
+    Session(String number, int maxDuration, PhoneAccountHandle account,
+        AudioControllerCallback callback) {
+      this.number = number;
+      this.maxDuration = Math.max(1, Math.min(120, maxDuration));
+      this.account = account;
+      this.callback = callback;
     }
-
-    if (mMaxDurationTimeoutRunnable != null) {
-      mMainHandler.removeCallbacks(mMaxDurationTimeoutRunnable);
-      mMaxDurationTimeoutRunnable = null;
-    }
-
-    stopPlayback();
-
-    mIsRecording = false;
-    if (mRecordingThread != null) {
-      try {
-        mRecordingThread.join(1000);
-      } catch (InterruptedException ignored) {}
-      mRecordingThread = null;
-    }
-
-    restoreLocalAudio();
-
-    long durationSeconds = 0;
-    if (mTempRecordingFile != null && mTempRecordingFile.exists() && mTempRecordingFile.length() > 44) {
-      long audioBytes = mTempRecordingFile.length() - 44;
-      durationSeconds = Math.max(1, audioBytes / 32000L);
-    }
-
-    Log.i(TAG, "stopSessionAndNotify: file="
-        + (mTempRecordingFile != null ? mTempRecordingFile.getAbsolutePath() : "null")
-        + ", length=" + (mTempRecordingFile != null ? mTempRecordingFile.length() : 0)
-        + ", duration=" + durationSeconds + "s");
-
-    if (mCallback != null && mTempRecordingFile != null && mTempRecordingFile.exists() && mTempRecordingFile.length() > 44) {
-      mCallback.onRecordingCompleted(mTempRecordingFile, durationSeconds);
-    }
-  }
-
-  public static void commitVoicemailToProvider(
-      @NonNull Context context,
-      @NonNull String callerNumber,
-      long durationSeconds,
-      @Nullable PhoneAccountHandle accountHandle,
-      @NonNull File recordingFile) {
-    new Thread(() -> {
-      if (!recordingFile.exists() || recordingFile.length() <= 44) {
-        Log.w(TAG, "Cannot commit empty voicemail file");
-        return;
-      }
-
-      try {
-        ContentValues values = new ContentValues();
-        values.put(Voicemails.DATE, String.valueOf(System.currentTimeMillis()));
-        values.put(Voicemails.NUMBER, callerNumber);
-        values.put(Voicemails.DURATION, durationSeconds);
-        values.put(Voicemails.MIME_TYPE, "audio/wav");
-        values.put(Voicemails.SOURCE_PACKAGE, context.getPackageName());
-        values.put(Voicemails.SOURCE_DATA, "local_voicemail_" + System.currentTimeMillis());
-        values.put(Voicemails.IS_READ, 0);
-        values.put(Voicemails.HAS_CONTENT, 1);
-        values.put(Voicemails.IS_OMTP_VOICEMAIL, 0);
-
-        if (accountHandle != null) {
-          if (accountHandle.getComponentName() != null) {
-            values.put(Voicemails.PHONE_ACCOUNT_COMPONENT_NAME,
-                accountHandle.getComponentName().flattenToString());
-          }
-          if (!TextUtils.isEmpty(accountHandle.getId())) {
-            values.put(Voicemails.PHONE_ACCOUNT_ID, accountHandle.getId());
-          }
-        }
-
-        Uri baseUri = Voicemails.buildSourceUri(context.getPackageName());
-        Uri voicemailUri = context.getContentResolver().insert(baseUri, values);
-        if (voicemailUri == null) {
-          Log.e(TAG, "Failed to insert voicemail entry into provider");
-          return;
-        }
-
-        try (InputStream in = new FileInputStream(recordingFile);
-             OutputStream out = context.getContentResolver().openOutputStream(voicemailUri)) {
-          if (out != null) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-              out.write(buffer, 0, read);
-            }
-            out.flush();
-          }
-        }
-
-        ContentValues updateValues = new ContentValues();
-        updateValues.put(Voicemails.HAS_CONTENT, 1);
-        context.getContentResolver().update(voicemailUri, updateValues, null, null);
-
-        Log.i(TAG, "Successfully committed local voicemail: " + voicemailUri
-            + " (duration=" + durationSeconds + "s, size=" + recordingFile.length() + " bytes)");
-
-        recordingFile.delete();
-      } catch (IOException | SecurityException e) {
-        Log.e(TAG, "Exception while writing voicemail audio to provider", e);
-      }
-    }).start();
-  }
-
-  private void stopPlayback() {
-    mIsPlayingGreeting = false;
-    synchronized (this) {
-      if (mAudioTrack != null) {
-        try {
-          mAudioTrack.stop();
-          mAudioTrack.release();
-        } catch (Exception ignored) {}
-        mAudioTrack = null;
-      }
-    }
-    if (mMediaPlayer != null) {
-      try {
-        if (mMediaPlayer.isPlaying()) {
-          mMediaPlayer.stop();
-        }
-        mMediaPlayer.release();
-      } catch (Exception ignored) {}
-      mMediaPlayer = null;
-    }
-  }
-
-  private void stopRecordingThread() {
-    mIsRecording = false;
-    synchronized (this) {
-      if (mAudioRecord != null) {
-        try {
-          mAudioRecord.stop();
-          mAudioRecord.release();
-        } catch (Exception ignored) {}
-        mAudioRecord = null;
-      }
-    }
-    if (mRecordingThread != null) {
-      try {
-        mRecordingThread.join(1000);
-      } catch (InterruptedException ignored) {}
-      mRecordingThread = null;
-    }
-  }
-
-  public boolean isPlayingGreeting() {
-    return mIsPlayingGreeting;
-  }
-
-  public boolean isRecording() {
-    return mIsRecording;
   }
 }
