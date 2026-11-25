@@ -37,7 +37,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
@@ -202,9 +202,13 @@ internal fun NumberCallRecordings(
                 }
             }
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(24.dp, 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 item(key = "auto_recording") {
-                    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Surface(
+                        Modifier.padding(bottom = 12.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
                         val checked = autoRecording == true
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
                             Row(Modifier.fillMaxWidth().toggleable(checked, role = Role.Switch,
@@ -248,14 +252,21 @@ internal fun NumberCallRecordings(
                     }
                 }
                 if (playback.failed) item(key = "playback_error") {
-                    Text(stringResource(R.string.expressive_recording_playback_failed), color = MaterialTheme.colorScheme.error)
+                    Text(
+                        stringResource(R.string.expressive_recording_playback_failed),
+                        Modifier.padding(bottom = 10.dp),
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
-                if (!loadFailed) items(recordings, key = { it.id }) { entry ->
+                if (!loadFailed) itemsIndexed(recordings, key = { _, it -> it.id }) { index, entry ->
                     val active = playback.mediaId == entry.id
                     val date = DateUtils.formatDateTime(context, entry.recording.creationTime,
                         DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH or
                             DateUtils.FORMAT_SHOW_YEAR or DateUtils.FORMAT_SHOW_TIME)
-                    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Surface(
+                        shape = dialerGroupedShape(index == 0, index == recordings.lastIndex),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow
+                    ) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(date, style = MaterialTheme.typography.titleSmall)
                             Text(entry.recording.fileName, maxLines = 2, overflow = TextOverflow.Ellipsis,
@@ -381,9 +392,9 @@ private fun RecordingPlaybackProgress(positionMillis: Long, durationMillis: Long
         contentDescription = description
         progressBarRangeInfo = if (preparing) ProgressBarRangeInfo.Indeterminate else ProgressBarRangeInfo(fraction, 0f..1f)
     }, horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(elapsed, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        Text(elapsed, style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"), maxLines = 1)
         if (preparing) LinearWavyProgressIndicator(modifier = Modifier.weight(1f))
         else LinearWavyProgressIndicator(progress = { progress }, modifier = Modifier.weight(1f))
-        Text(total, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        Text(total, style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"), maxLines = 1)
     }
 }

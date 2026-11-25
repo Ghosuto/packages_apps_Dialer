@@ -14,11 +14,12 @@
  * limitations under the License
  */
 
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.android.dialer.expressive
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
@@ -90,16 +91,16 @@ internal fun IncomingCallHandle(enabled: Boolean) {
     val answering = swipe.offset < 0
     val colors = MaterialTheme.colorScheme
     val scale by animateFloatAsState(if (direction != 0) 1.06f else 1f,
-        spring(.7f, 400f), label = "incoming handle scale")
+        MaterialTheme.motionScheme.fastSpatialSpec(), label = "incoming handle scale")
     val background by animateColorAsState(when {
         !feedbackVisible -> colors.inverseSurface
         answering -> AnswerGreen
         else -> EndCallRed
-    }, spring(.8f, 500f), label = "incoming handle color")
+    }, MaterialTheme.motionScheme.fastEffectsSpec(), label = "incoming handle color")
     val foreground by animateColorAsState(when {
         !feedbackVisible -> colors.inverseOnSurface
         else -> Color.White
-    }, label = "incoming handle icon")
+    }, MaterialTheme.motionScheme.fastEffectsSpec(), label = "incoming handle icon")
     Box(Modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(1f)
         .graphicsLayer { alpha = if (enabled) 1f else .5f }.clearAndSetSemantics {},
         contentAlignment = Alignment.Center) {

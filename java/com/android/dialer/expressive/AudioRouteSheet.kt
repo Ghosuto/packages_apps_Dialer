@@ -19,10 +19,20 @@
 package com.android.dialer.expressive
 
 import android.telecom.CallAudioState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
@@ -35,20 +45,57 @@ internal fun AudioRouteSheet(state: CallAudioState, onDismiss: () -> Unit, onSel
         Triple(CallAudioState.ROUTE_WIRED_HEADSET, DialerSymbol.Headset, R.string.expressive_headset),
         Triple(CallAudioState.ROUTE_BLUETOOTH, DialerSymbol.Bluetooth, R.string.expressive_bluetooth),
         Triple(CallAudioState.ROUTE_SPEAKER, DialerSymbol.Speaker, R.string.expressive_speaker)
-    )
+    ).filter { (route, _, _) -> state.supportedRouteMask and route != 0 }
+    val haptic = LocalHapticFeedback.current
     DialerModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(stringResource(R.string.expressive_choose_audio), Modifier.padding(bottom = 12.dp),
-                style = MaterialTheme.typography.headlineMediumEmphasized)
-            routes.filter { (route, _, _) -> state.supportedRouteMask and route != 0 }.forEach { (route, icon, label) ->
-                ExpressiveTile(onClick = { onSelect(route) }, selected = state.route == route,
-                    modifier = Modifier.fillMaxWidth().semantics { selected = state.route == route }) {
-                    Symbol(icon)
-                    Text(stringResource(label), Modifier.weight(1f).padding(start = 16.dp),
-                        style = if (state.route == route) MaterialTheme.typography.titleMediumEmphasized
-                            else MaterialTheme.typography.titleMedium)
-                    RadioButton(selected = state.route == route, onClick = null)
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+            Text(stringResource(R.string.expressive_choose_audio), Modifier.padding(bottom = 16.dp),
+                style = MaterialTheme.typography.headlineSmallEmphasized)
+            Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                routes.forEachIndexed { index, (route, icon, label) ->
+                    val isSelected = state.route == route
+                    val container by animateColorAsState(
+                        if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerLow,
+                        MaterialTheme.motionScheme.fastEffectsSpec(), label = "audio bg"
+                    )
+                    val content by animateColorAsState(
+                        if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface,
+                        MaterialTheme.motionScheme.fastEffectsSpec(), label = "audio fg"
+                    )
+                    val interaction = remember { MutableInteractionSource() }
+                    Surface(
+                        shape = dialerGroupedShape(index == 0, index == routes.lastIndex),
+                        color = container,
+                        contentColor = content
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .heightIn(min = 56.dp)
+                                .selectable(
+                                    selected = isSelected,
+                                    interactionSource = interaction,
+                                    indication = LocalIndication.current,
+                                    role = Role.RadioButton,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onSelect(route)
+                                    }
+                                )
+                                .padding(horizontal = 18.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Symbol(icon)
+                            Text(
+                                stringResource(label),
+                                Modifier.weight(1f).padding(horizontal = 16.dp),
+                                style = if (isSelected) MaterialTheme.typography.titleMediumEmphasized
+                                else MaterialTheme.typography.titleMedium
+                            )
+                            if (isSelected) Symbol(DialerSymbol.Check, modifier = Modifier.size(20.dp))
+                        }
+                    }
                 }
             }
         }

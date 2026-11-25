@@ -28,7 +28,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,8 +47,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -305,11 +303,22 @@ private fun CallStatsScreen(
                         )
                     }
                 } else {
-                    val maximum = sortedMetrics.first().metric.let {
+                    val topContacts = sortedMetrics.take(8)
+                    val maximum = topContacts.first().metric.let {
                         if (sortByDuration) it.duration.toFloat() else it.count.toFloat()
                     }.coerceAtLeast(1f)
-                    items(sortedMetrics.take(8), key = { it.number }) { item ->
-                        ContactMetricCard(item, maximum, sortByDuration, onContactSelected)
+                    item(key = "top_contacts_group") {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            topContacts.forEachIndexed { index, item ->
+                                ContactMetricCard(
+                                    item = item,
+                                    maximum = maximum,
+                                    sortByDuration = sortByDuration,
+                                    shape = dialerGroupedShape(index == 0, index == topContacts.lastIndex),
+                                    onContactSelected = onContactSelected
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -324,20 +333,14 @@ private fun <T> ChoiceRow(
     label: @Composable (T) -> String,
     onSelected: (T) -> Unit
 ) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        values.forEach { value ->
-            ExpressiveTile(
-                onClick = { onSelected(value) },
-                selected = value == selected,
-                modifier = Modifier.height(52.dp)
-            ) {
-                Text(label(value), maxLines = 1, style = MaterialTheme.typography.labelLargeEmphasized)
-            }
-        }
-    }
+    ExpressiveChoiceGroup(
+        values = values,
+        selected = selected,
+        label = label,
+        onSelected = onSelected,
+        modifier = Modifier.fillMaxWidth(),
+        scrollable = true
+    )
 }
 
 @Composable
@@ -381,7 +384,7 @@ private fun SummaryCard(summary: CallMetric, range: DateRange, type: CallType) {
             Text(
                 formatDuration(summary.duration),
                 Modifier.padding(top = 4.dp),
-                style = MaterialTheme.typography.displaySmallEmphasized
+                style = MaterialTheme.typography.displaySmallEmphasized.copy(fontFeatureSettings = "tnum")
             )
             Text(
                 stringResource(R.string.call_statistics_matching_calls, summary.count),
@@ -414,14 +417,14 @@ private fun MetricCards(details: List<CallStatsDetails>, selectedType: CallType)
                     Text(kind.label(), style = MaterialTheme.typography.labelLargeEmphasized)
                     Text(
                         pluralStringResource(R.plurals.call, metric.count, metric.count),
-                        style = MaterialTheme.typography.titleLargeEmphasized,
+                        style = MaterialTheme.typography.titleLargeEmphasized.copy(fontFeatureSettings = "tnum"),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         if (kind == CallType.MISSED) stringResource(R.string.call_statistics_unanswered)
                         else formatDuration(metric.duration),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -436,13 +439,14 @@ private fun ContactMetricCard(
     item: ContactMetric,
     maximum: Float,
     sortByDuration: Boolean,
+    shape: Shape,
     onContactSelected: (CallStatsDetails) -> Unit
 ) {
     val value = if (sortByDuration) item.metric.duration.toFloat() else item.metric.count.toFloat()
     Surface(
         Modifier.fillMaxWidth().clickable { onContactSelected(item.details) }
             .semantics { role = Role.Button },
-        shape = RoundedCornerShape(24.dp),
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -465,10 +469,13 @@ private fun ContactMetricCard(
             }
             Spacer(Modifier.width(14.dp))
             Column(horizontalAlignment = Alignment.End) {
-                Text(formatDuration(item.metric.duration), style = MaterialTheme.typography.titleMediumEmphasized)
+                Text(
+                    formatDuration(item.metric.duration),
+                    style = MaterialTheme.typography.titleMediumEmphasized.copy(fontFeatureSettings = "tnum")
+                )
                 Text(
                     pluralStringResource(R.plurals.call, item.metric.count, item.metric.count),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }

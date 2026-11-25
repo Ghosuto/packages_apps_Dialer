@@ -32,7 +32,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ElevatedCard
@@ -53,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
@@ -187,10 +187,17 @@ private fun QuickResponsesScreen(onBack: () -> Unit) {
                     }
                 }
             } else {
-                items(responses, key = { it }) { response ->
-                    QuickResponseRow(response) {
-                        store.remove(response)
-                        responses = store.load()
+                item(key = "custom_responses_group") {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        responses.forEachIndexed { index, response ->
+                            QuickResponseRow(
+                                response = response,
+                                shape = dialerGroupedShape(index == 0, index == responses.lastIndex)
+                            ) {
+                                store.remove(response)
+                                responses = store.load()
+                            }
+                        }
                     }
                 }
             }
@@ -214,10 +221,10 @@ private fun QuickResponsesScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun QuickResponseRow(response: String, onDelete: () -> Unit) {
+private fun QuickResponseRow(response: String, shape: Shape, onDelete: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Row(

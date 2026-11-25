@@ -26,7 +26,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -37,7 +37,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.dialer.R
@@ -51,7 +50,8 @@ internal fun RecentCallCard(
     onActions: () -> Unit, onHistory: () -> Unit, onRecordings: () -> Unit, onCall: () -> Unit,
     onRequestDelete: () -> Unit, onDelete: ((Boolean) -> Unit) -> Unit,
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(28.dp)
+    first: Boolean = true,
+    last: Boolean = true
 ) {
     val call = group.latest
     val name = call.displayName()
@@ -61,6 +61,12 @@ internal fun RecentCallCard(
     val currentDelete by rememberUpdatedState(onDelete)
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
+    val shape = rememberAnimatedGroupedShape(first, last, expanded)
+    val cardColor by animateColorAsState(
+        if (expanded) MaterialTheme.colorScheme.surfaceContainer
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        MaterialTheme.motionScheme.fastEffectsSpec(), label = "recent card color"
+    )
     val expandRotation by animateFloatAsState(if (expanded) 180f else 0f,
         MaterialTheme.motionScheme.fastSpatialSpec(), label = "call details")
     val expandedLabel = stringResource(if (expanded) R.string.expressive_collapse_calls else R.string.expressive_expand_calls)
@@ -75,7 +81,7 @@ internal fun RecentCallCard(
         }
         val progress = (abs(swipe.offset) / threshold).coerceIn(0f, 1f)
         val actionScale by animateFloatAsState(if (direction != 0) 1.08f else .9f,
-            spring(.7f, 450f), label = "swipe feedback")
+            MaterialTheme.motionScheme.fastSpatialSpec(), label = "swipe feedback")
         val calling = swipe.offset > 0
         val colors = MaterialTheme.colorScheme
         if (progress > 0f && (!calling || call.callable)) Surface(
@@ -108,7 +114,7 @@ internal fun RecentCallCard(
                     1 -> { swipe.settle(velocity = velocity); currentCall() }
                     else -> swipe.settle(velocity = velocity)
                 }
-            }.graphicsLayer { translationX = swipe.offset }, shape = shape, color = colors.surfaceContainerLow) {
+            }.graphicsLayer { translationX = swipe.offset }, shape = shape, color = cardColor) {
             Column {
                 Row(Modifier.fillMaxWidth().semantics {
                     stateDescription = expandedLabel
@@ -122,18 +128,33 @@ internal fun RecentCallCard(
                         Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.titleMediumEmphasized,
                             color = if (call.type == Calls.MISSED_TYPE) colors.error else colors.onSurface)
-                        if (call.spamStatus == CarrierCallIdentity.SPAM_CONFIRMED ||
-                            call.spamStatus == CarrierCallIdentity.SPAM_SUSPECTED) {
-                            Text(stringResource(if (call.spamStatus == CarrierCallIdentity.SPAM_CONFIRMED)
-                                R.string.expressive_confirmed_spam else R.string.expressive_suspected_spam),
-                                color = if (call.spamStatus == CarrierCallIdentity.SPAM_CONFIRMED) colors.error else Color(0xFFB26A00),
-                                style = MaterialTheme.typography.labelSmall)
+                        if (call.spamStatus == CarrierCallIdentity.SPAM_CONFIRMED) {
+                            ExpressiveStatusBadge(
+                                stringResource(R.string.expressive_confirmed_spam),
+                                CallerBadgeTone.Error,
+                                Modifier.padding(top = 4.dp, bottom = 2.dp),
+                                DialerSymbol.Block
+                            )
+                        } else if (call.spamStatus == CarrierCallIdentity.SPAM_SUSPECTED) {
+                            ExpressiveStatusBadge(
+                                stringResource(R.string.expressive_suspected_spam),
+                                CallerBadgeTone.Warning,
+                                Modifier.padding(top = 4.dp, bottom = 2.dp),
+                                DialerSymbol.Info
+                            )
                         } else if (call.verificationStatus == CarrierCallIdentity.VERIFICATION_VERIFIED) {
-                            Text(stringResource(R.string.expressive_verified_caller), color = Color(0xFF16834B),
-                                style = MaterialTheme.typography.labelSmall)
+                            ExpressiveStatusBadge(
+                                stringResource(R.string.expressive_verified_caller),
+                                CallerBadgeTone.Verified,
+                                Modifier.padding(top = 4.dp, bottom = 2.dp),
+                                DialerSymbol.Check
+                            )
                         } else if (call.spamStatus == CarrierCallIdentity.SPAM_NOT_SPAM) {
-                            Text(stringResource(R.string.expressive_not_spam), color = colors.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelSmall)
+                            ExpressiveStatusBadge(
+                                stringResource(R.string.expressive_not_spam),
+                                CallerBadgeTone.Neutral,
+                                Modifier.padding(top = 4.dp, bottom = 2.dp)
+                            )
                         }
                         Text(call.typeLabel() + " · " + DateUtils.formatDateTime(LocalContext.current,
                             call.date, DateUtils.FORMAT_SHOW_TIME), style = MaterialTheme.typography.bodySmall,
@@ -162,22 +183,53 @@ internal fun RecentCallCard(
                     }
                 }
                 AnimatedVisibility(expanded,
-                    enter = expandVertically(spring(.82f, 420f), expandFrom = Alignment.Top) + fadeIn(),
-                    exit = shrinkVertically(spring(.85f, 450f), shrinkTowards = Alignment.Top) + fadeOut()) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
-                        HorizontalDivider(color = colors.outlineVariant)
+                    enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec(), expandFrom = Alignment.Top) +
+                        fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()),
+                    exit = shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec(), shrinkTowards = Alignment.Top) +
+                        fadeOut(MaterialTheme.motionScheme.fastEffectsSpec())) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+                        HorizontalDivider(color = colors.outlineVariant.copy(alpha = .5f))
                         if (group.calls.size > 5) Text(stringResource(R.string.expressive_latest_five),
                             Modifier.padding(top = 12.dp), style = MaterialTheme.typography.labelMedium)
                         group.preview.forEach { RecentCallDetail(it, showDate = true) }
-                        if (call.callable) TextButton(onClick = onHistory, enabled = !deleting,
-                            modifier = Modifier.fillMaxWidth()) {
-                            Symbol(DialerSymbol.History)
-                            Text(stringResource(R.string.expressive_full_history), Modifier.padding(start = 8.dp))
-                        }
-                        if (call.callable || call.voipPackage != null) TextButton(onClick = onRecordings, enabled = !deleting,
-                            modifier = Modifier.fillMaxWidth()) {
-                            Symbol(DialerSymbol.Record)
-                            Text(stringResource(R.string.expressive_call_recordings), Modifier.padding(start = 8.dp))
+                        if (call.callable || call.voipPackage != null) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(top = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (call.callable) {
+                                    FilledTonalButton(
+                                        onClick = onHistory,
+                                        enabled = !deleting,
+                                        shape = CircleShape,
+                                        modifier = Modifier.weight(1f),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                                    ) {
+                                        Symbol(DialerSymbol.History, modifier = Modifier.size(18.dp))
+                                        Text(
+                                            stringResource(R.string.expressive_full_history),
+                                            Modifier.padding(start = 6.dp),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                FilledTonalButton(
+                                    onClick = onRecordings,
+                                    enabled = !deleting,
+                                    shape = CircleShape,
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                                ) {
+                                    Symbol(DialerSymbol.Record, modifier = Modifier.size(18.dp))
+                                    Text(
+                                        stringResource(R.string.expressive_call_recordings),
+                                        Modifier.padding(start = 6.dp),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -201,7 +253,8 @@ private fun RecentCallDetail(call: RecentCall, showDate: Boolean) {
             else CallSimLabel(call.simNumber, Modifier.padding(top = 4.dp))
         }
         if (call.duration > 0) Text(DateUtils.formatElapsedTime(call.duration),
-            Modifier.padding(start = 12.dp), style = MaterialTheme.typography.labelMedium)
+            Modifier.padding(start = 12.dp),
+            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"))
     }
 }
 
@@ -238,19 +291,34 @@ internal fun NumberCallHistory(selected: RecentCall, calls: List<RecentCall>,
                 Symbol(DialerSymbol.Record)
                 Text(stringResource(R.string.expressive_call_recordings), Modifier.padding(start = 8.dp))
             }
-            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp)) {
+            LazyColumn(
+                Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 if (history.isEmpty()) item {
                     Text(stringResource(R.string.expressive_no_calls_body), Modifier.padding(vertical = 24.dp))
                 }
-                var previousDay = ""
-                history.forEach { call ->
-                    val day = DateUtils.formatDateTime(context, call.date,
+                val days = history.map { call ->
+                    DateUtils.formatDateTime(context, call.date,
                         DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_YEAR or DateUtils.FORMAT_ABBREV_MONTH)
-                    if (day != previousDay) {
-                        item(key = "day_${call.id}") { SectionLabel(day) }
-                        previousDay = day
+                }
+                history.forEachIndexed { index, call ->
+                    val first = index == 0 || days[index - 1] != days[index]
+                    val last = index == history.lastIndex || days[index + 1] != days[index]
+                    if (first) {
+                        item(key = "day_${call.id}") { SectionLabel(days[index]) }
                     }
-                    item(key = call.id) { RecentCallDetail(call, showDate = false) }
+                    item(key = call.id) {
+                        Surface(
+                            shape = dialerGroupedShape(first, last),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow
+                        ) {
+                            Box(Modifier.padding(horizontal = 16.dp)) {
+                                RecentCallDetail(call, showDate = false)
+                            }
+                        }
+                    }
                 }
             }
         }

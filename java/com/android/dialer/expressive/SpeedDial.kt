@@ -32,8 +32,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.dialer.R
 
@@ -64,14 +65,15 @@ internal fun SpeedDialScreen(
     contactsAllowed: Boolean,
     onAssign: (Int, SpeedDialEntry) -> Unit,
     onRemove: (Int) -> Unit,
-    onCall: (String) -> Unit
+    onCall: (String) -> Unit,
+    bottomInset: Dp = 0.dp
 ) {
     var assignmentKey by remember { mutableStateOf<Int?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 112.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp + bottomInset),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         item {
             Row(
@@ -240,13 +242,13 @@ private fun SpeedDialAssignmentDialog(
                 } else if (matches.isNotEmpty()) {
                     LazyColumn(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 264.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        items(matches, key = { "${it.id}:${it.number}" }) { person ->
+                        itemsIndexed(matches, key = { _, it -> "${it.id}:${it.number}" }) { index, person ->
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 onClick = { onAssign(SpeedDialEntry(person.name, person.number)) },
-                                shape = RoundedCornerShape(18.dp),
+                                shape = dialerGroupedShape(index == 0, index == matches.lastIndex),
                                 color = MaterialTheme.colorScheme.surfaceContainerLow
                             ) {
                                 Row(

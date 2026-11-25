@@ -97,11 +97,138 @@ fun Symbol(symbol: DialerSymbol, description: String? = null, modifier: Modifier
 
 /** Connected surfaces use generous outer corners and a small gap at their shared edges. */
 internal fun dialerGroupedShape(first: Boolean, last: Boolean) = RoundedCornerShape(
-    topStart = if (first) 28.dp else 4.dp,
-    topEnd = if (first) 28.dp else 4.dp,
-    bottomStart = if (last) 28.dp else 4.dp,
-    bottomEnd = if (last) 28.dp else 4.dp
+    topStart = if (first) 24.dp else 6.dp,
+    topEnd = if (first) 24.dp else 6.dp,
+    bottomStart = if (last) 24.dp else 6.dp,
+    bottomEnd = if (last) 24.dp else 6.dp
 )
+
+@Composable
+internal fun rememberAnimatedGroupedShape(first: Boolean, last: Boolean, expanded: Boolean): RoundedCornerShape {
+    val spec = MaterialTheme.motionScheme.fastSpatialSpec<Dp>()
+    val top by animateDpAsState(if (first || expanded) 24.dp else 6.dp, spec, label = "group top")
+    val bottom by animateDpAsState(if (last || expanded) 24.dp else 6.dp, spec, label = "group bottom")
+    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
+}
+
+internal enum class CallerBadgeTone {
+    Error,
+    Warning,
+    Verified,
+    Neutral
+}
+
+@Composable
+internal fun ExpressiveStatusBadge(
+    text: String,
+    tone: CallerBadgeTone,
+    modifier: Modifier = Modifier,
+    icon: DialerSymbol? = null
+) {
+    val dark = isSystemInDarkTheme()
+    val monochrome = LocalMonochromeTheme.current
+    val colors = MaterialTheme.colorScheme
+    val (container, foreground) = when {
+        monochrome && tone != CallerBadgeTone.Error -> colors.surfaceContainerHigh to colors.onSurfaceVariant
+        tone == CallerBadgeTone.Error -> colors.errorContainer to colors.onErrorContainer
+        tone == CallerBadgeTone.Warning -> if (dark) Color(0xFF423000) to Color(0xFFFFD57E) else Color(0xFFFFEFC7) to Color(0xFF7A4900)
+        tone == CallerBadgeTone.Verified -> if (dark) Color(0xFF0F3821) to Color(0xFF8BE2AA) else Color(0xFFD6F5E1) to Color(0xFF0E5C2F)
+        else -> colors.surfaceContainerHigh to colors.onSurfaceVariant
+    }
+    Surface(modifier, shape = CircleShape, color = container, contentColor = foreground) {
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (icon != null) Symbol(icon, modifier = Modifier.size(14.dp))
+            Text(text, style = MaterialTheme.typography.labelSmallEmphasized, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+internal fun <T> ExpressiveChoiceGroup(
+    values: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelected: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    scrollable: Boolean = false
+) {
+    val haptic = LocalHapticFeedback.current
+    val rowModifier = if (scrollable) modifier.horizontalScroll(rememberScrollState()) else modifier
+    Row(
+        rowModifier.selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        values.forEachIndexed { index, value ->
+            val isSelected = value == selected
+            val first = index == 0
+            val last = index == values.lastIndex
+            val interaction = remember { MutableInteractionSource() }
+            val pressed by interaction.collectIsPressedAsState()
+            val spatial = MaterialTheme.motionScheme.fastSpatialSpec<Dp>()
+            val startRadius by animateDpAsState(if (pressed) 12.dp else if (first || isSelected) 22.dp else 6.dp, spatial, label = "choice start")
+            val endRadius by animateDpAsState(if (pressed) 12.dp else if (last || isSelected) 22.dp else 6.dp, spatial, label = "choice end")
+            val container by animateColorAsState(
+                if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                else MaterialTheme.colorScheme.surfaceContainerHigh,
+                MaterialTheme.motionScheme.fastEffectsSpec(), label = "choice bg"
+            )
+            val content by animateColorAsState(
+                if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                MaterialTheme.motionScheme.fastEffectsSpec(), label = "choice fg"
+            )
+            Surface(
+                shape = RoundedCornerShape(
+                    topStart = startRadius,
+                    bottomStart = startRadius,
+                    topEnd = endRadius,
+                    bottomEnd = endRadius
+                ),
+                color = container,
+                contentColor = content
+            ) {
+                Row(
+                    Modifier
+                        .heightIn(min = 40.dp)
+                        .selectable(
+                            selected = isSelected,
+                            interactionSource = interaction,
+                            indication = LocalIndication.current,
+                            role = Role.RadioButton,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelected(value)
+                            }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AnimatedVisibility(
+                        visible = isSelected,
+                        enter = fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()) +
+                            expandHorizontally(MaterialTheme.motionScheme.fastSpatialSpec()),
+                        exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()) +
+                            shrinkHorizontally(MaterialTheme.motionScheme.fastSpatialSpec())
+                    ) {
+                        Symbol(DialerSymbol.Check, modifier = Modifier.size(16.dp))
+                    }
+                    Text(
+                        label(value),
+                        maxLines = 1,
+                        style = if (isSelected) MaterialTheme.typography.labelLargeEmphasized
+                        else MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 internal fun DialerEmblem(symbol: DialerSymbol, modifier: Modifier = Modifier) {
@@ -120,6 +247,11 @@ fun ExpressiveTile(
     enabled: Boolean = true, onLongClick: (() -> Unit)? = null,
     interactionSource: MutableInteractionSource? = null,
     highlightOnPress: Boolean = false, onLongClickLabel: String? = null,
+    restingRadius: Dp = 32.dp,
+    selectedRadius: Dp = 20.dp,
+    pressedRadius: Dp = 16.dp,
+    shadowElevation: Dp = 0.dp,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
     color: Color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
     contentColor: Color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
     content: @Composable RowScope.() -> Unit
@@ -142,7 +274,7 @@ fun ExpressiveTile(
     }
     val scale by animateFloatAsState(if (pressed) .96f else 1f,
         MaterialTheme.motionScheme.fastSpatialSpec(), label = "press")
-    val radius by animateDpAsState(if (pressed) 16.dp else if (selected) 22.dp else 32.dp,
+    val radius by animateDpAsState(if (pressed) pressedRadius else if (selected) selectedRadius else restingRadius,
         MaterialTheme.motionScheme.fastSpatialSpec(), label = "shape")
     val background by animateColorAsState(if (pressed && highlightOnPress) MaterialTheme.colorScheme.primary else color,
         MaterialTheme.motionScheme.fastEffectsSpec(), label = "tile color")
@@ -150,13 +282,14 @@ fun ExpressiveTile(
         MaterialTheme.motionScheme.fastEffectsSpec(), label = "tile content")
     val haptic = LocalHapticFeedback.current
     Surface(modifier.graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (enabled) 1f else .38f },
-        shape = RoundedCornerShape(radius), color = background, contentColor = foreground) {
+        shape = RoundedCornerShape(radius), color = background, contentColor = foreground,
+        shadowElevation = shadowElevation) {
         Row(Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 56.dp)
             .combinedClickable(enabled = enabled, interactionSource = interaction,
                 indication = LocalIndication.current, role = Role.Button,
                 onLongClick = onLongClick, onLongClickLabel = onLongClickLabel, onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick()
-                }).padding(horizontal = 16.dp, vertical = 12.dp),
+                }).padding(contentPadding),
             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
             content = content)
     }
@@ -175,7 +308,8 @@ fun FloatingDialerBar(
     labels: List<String>,
     onSelect: (Int) -> Unit,
     compact: Boolean = false,
-    hiddenItems: Set<String> = emptySet()
+    hiddenItems: Set<String> = emptySet(),
+    modifier: Modifier = Modifier
 ) {
     val items = listOf(
         DialerNavItem(0, "recents", labels.getOrElse(0) { "" }, DialerSymbol.History),
@@ -186,11 +320,17 @@ fun FloatingDialerBar(
     )
     val visibleItems = items.filter { it.key !in hiddenItems && it.index.toString() !in hiddenItems }
     val haptic = LocalHapticFeedback.current
-    Surface(shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = 0.dp, tonalElevation = 2.dp,
-        modifier = Modifier.widthIn(max = if (compact) 280.dp else 440.dp)
-            .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())) {
-        Row(Modifier.padding(6.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(2.dp),
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shadowElevation = 4.dp,
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f)),
+        modifier = modifier
+            .widthIn(max = if (compact) 280.dp else 440.dp)
+            .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec())
+    ) {
+        Row(Modifier.padding(5.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically) {
             visibleItems.forEach { navItem ->
                 val active = selected == navItem.index
@@ -198,25 +338,28 @@ fun FloatingDialerBar(
                 val pressed by interaction.collectIsPressedAsState()
                 val scale by animateFloatAsState(if (pressed) .94f else 1f,
                     MaterialTheme.motionScheme.fastSpatialSpec(), label = "nav press")
-                val radius by animateDpAsState(if (pressed) 16.dp else 26.dp,
+                val radius by animateDpAsState(if (pressed) 16.dp else 28.dp,
                     MaterialTheme.motionScheme.fastSpatialSpec(), label = "nav shape")
-                val weight by animateFloatAsState(if (active && !compact) 2.2f else 1f,
+                val weight by animateFloatAsState(if (active && !compact) 2.1f else 1f,
                     MaterialTheme.motionScheme.defaultSpatialSpec(), label = "nav width")
                 val color by animateColorAsState(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
                     MaterialTheme.motionScheme.fastEffectsSpec(), label = "nav color")
-                Row(Modifier.weight(weight).heightIn(min = 52.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+                Row(Modifier.weight(weight).heightIn(min = 50.dp).graphicsLayer { scaleX = scale; scaleY = scale }
                     .clip(RoundedCornerShape(radius)).background(color)
                     .selectable(active, interactionSource = interaction, indication = LocalIndication.current,
                         role = Role.Tab, onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSelect(navItem.index)
-                        }).semantics { contentDescription = navItem.label }.padding(horizontal = 8.dp, vertical = 14.dp),
+                        }).semantics { contentDescription = navItem.label }
+                    .padding(horizontal = if (active && !compact) 8.dp else 4.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     CompositionLocalProvider(LocalContentColor provides if (active) MaterialTheme.colorScheme.onPrimaryContainer
                         else MaterialTheme.colorScheme.onSurfaceVariant) {
                         Symbol(navItem.icon, modifier = Modifier.size(22.dp))
                         AnimatedVisibility(!compact && active,
-                            enter = fadeIn() + expandHorizontally(MaterialTheme.motionScheme.defaultSpatialSpec()),
-                            exit = fadeOut() + shrinkHorizontally()) {
+                            enter = fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()) +
+                                expandHorizontally(MaterialTheme.motionScheme.defaultSpatialSpec()),
+                            exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()) +
+                                shrinkHorizontally(MaterialTheme.motionScheme.fastSpatialSpec())) {
                             Text(navItem.label, Modifier.padding(start = 6.dp).clearAndSetSemantics {}, maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.labelLargeEmphasized)

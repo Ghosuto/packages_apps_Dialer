@@ -14,7 +14,8 @@
  * limitations under the License
  */
 
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package com.android.dialer.expressive
 
 import android.content.SharedPreferences
@@ -205,11 +206,34 @@ class ExpressiveAnswerFragment : ExpressiveCallFragment(), AnswerScreen {
         if (takingAction) Text(stringResource(R.string.expressive_connecting), Modifier.padding(8.dp)
             .semantics { liveRegion = LiveRegionMode.Polite })
         if (showResponses) DialerModalBottomSheet(onDismissRequest = { showResponses = false }) {
-            responses.forEach { response ->
-                TextButton(onClick = { rejectWithResponse(response) }, enabled = answerScreenReady && !takingAction && hasIncomingCall(),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) { Text(response) }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+                Text(
+                    stringResource(R.string.expressive_reply),
+                    Modifier.padding(bottom = 16.dp),
+                    style = MaterialTheme.typography.headlineSmallEmphasized
+                )
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    val canReply = answerScreenReady && !takingAction && hasIncomingCall()
+                    responses.forEachIndexed { index, response ->
+                        Surface(
+                            onClick = { rejectWithResponse(response) },
+                            enabled = canReply,
+                            shape = dialerGroupedShape(index == 0, index == responses.lastIndex),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Symbol(DialerSymbol.Message, modifier = Modifier.size(20.dp))
+                                Text(response, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+                }
             }
-            Spacer(Modifier.height(24.dp))
         }
     }
     override fun getCallId(): String = requireArguments().getString("call_id")!!

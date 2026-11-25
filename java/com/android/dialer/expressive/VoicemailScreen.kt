@@ -34,7 +34,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -209,8 +208,8 @@ fun VoicemailScreen(onCallVoicemail: () -> Unit = {}, onSettings: () -> Unit, bo
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 104.dp + bottomInset),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 24.dp + bottomInset),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         if (messages.isEmpty() || unavailable) item {
             EmptyDialerState(
@@ -222,45 +221,66 @@ fun VoicemailScreen(onCallVoicemail: () -> Unit = {}, onSettings: () -> Unit, bo
             )
         }
 
-        items(messages, key = { it.id }) { message ->
+        itemsIndexed(messages, key = { _, it -> it.id }) { index, message ->
             val isCurrentActive = activeId == message.id
+            val cardShape = rememberAnimatedGroupedShape(index == 0, index == messages.lastIndex, isCurrentActive)
+            val cardColor by animateColorAsState(
+                if (isCurrentActive) MaterialTheme.colorScheme.surfaceContainer
+                else MaterialTheme.colorScheme.surfaceContainerLow,
+                MaterialTheme.motionScheme.fastEffectsSpec(),
+                label = "voicemail card color"
+            )
+            val title = message.name
+                ?: message.number.takeIf { it.isNotBlank() && it != "Unknown" }
+                ?: stringResource(R.string.expressive_unknown)
 
             Surface(
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow
+                shape = cardShape,
+                color = cardColor
             ) {
                 Column(
-                    Modifier.fillMaxWidth().padding(20.dp),
+                    Modifier.fillMaxWidth().padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val title = message.name
-                        ?: message.number.takeIf { it.isNotBlank() && it != "Unknown" }
-                        ?: stringResource(R.string.expressive_unknown)
-                    Text(title, style = MaterialTheme.typography.titleMediumEmphasized)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ContactAvatar(
+                            title,
+                            number = if (message.number != "Unknown") message.number else ""
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(title, style = MaterialTheme.typography.titleMediumEmphasized)
 
-                    val subtitle = buildString {
-                        if (message.name != null && message.number.isNotBlank() && message.number != "Unknown") {
-                            append(message.number)
-                            append(" · ")
+                            val subtitle = buildString {
+                                if (message.name != null && message.number.isNotBlank() && message.number != "Unknown") {
+                                    append(message.number)
+                                    append(" · ")
+                                }
+                                append(DateUtils.getRelativeTimeSpanString(message.date))
+                                append(" · ")
+                                append(DateUtils.formatElapsedTime(message.duration))
+                            }
+                            Text(
+                                subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        append(DateUtils.getRelativeTimeSpanString(message.date))
-                        append(" · ")
-                        append(DateUtils.formatElapsedTime(message.duration))
                     }
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
 
                     if (message.transcript.isNotBlank()) {
-                        Text(message.transcript)
+                        Text(message.transcript, style = MaterialTheme.typography.bodyMedium)
                     }
 
                     AnimatedVisibility(
                         visible = isCurrentActive,
-                        enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-                        exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+                        enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec(), expandFrom = Alignment.Top) +
+                            fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()),
+                        exit = shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec(), shrinkTowards = Alignment.Top) +
+                            fadeOut(MaterialTheme.motionScheme.fastEffectsSpec())
                     ) {
                         val effectiveTotal = if (totalDurationMs > 0) {
                             totalDurationMs
@@ -293,12 +313,12 @@ fun VoicemailScreen(onCallVoicemail: () -> Unit = {}, onSettings: () -> Unit, bo
                             ) {
                                 Text(
                                     DateUtils.formatElapsedTime((currentPos / 1000).toLong()),
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
                                     DateUtils.formatElapsedTime((effectiveTotal / 1000).toLong()),
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }

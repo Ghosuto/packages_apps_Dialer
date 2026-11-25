@@ -73,12 +73,14 @@ private class DialerFontFamily(context: Context) {
         lineHeight: TextUnit,
         weight: FontWeight = FontWeight.Normal,
         tracking: TextUnit = 0.02.em,
+        hyphens: Hyphens = Hyphens.None,
     ): TextStyle = expressiveStyle(
         fontFamily = plain ?: variableFont("variable-$token"),
         fontWeight = weight,
         fontSize = size,
         lineHeight = lineHeight,
         letterSpacing = tracking,
+        hyphens = hyphens,
     )
 
     fun plainEmphasized(
@@ -86,12 +88,14 @@ private class DialerFontFamily(context: Context) {
         size: TextUnit,
         lineHeight: TextUnit,
         tracking: TextUnit = 0.02.em,
+        hyphens: Hyphens = Hyphens.None,
     ): TextStyle = expressiveStyle(
         fontFamily = plain ?: variableFont("variable-$token-emphasized"),
         fontWeight = FontWeight.SemiBold,
         fontSize = size,
         lineHeight = lineHeight,
         letterSpacing = tracking,
+        hyphens = hyphens,
     )
 
     companion object {
@@ -124,13 +128,14 @@ private fun expressiveStyle(
     fontSize: TextUnit,
     lineHeight: TextUnit,
     letterSpacing: TextUnit = 0.02.em,
+    hyphens: Hyphens = Hyphens.None,
 ): TextStyle = TextStyle(
     fontFamily = fontFamily,
     fontWeight = fontWeight,
     fontSize = fontSize,
     lineHeight = lineHeight,
     letterSpacing = letterSpacing,
-    hyphens = Hyphens.Auto,
+    hyphens = hyphens,
 )
 
 private fun buildExpressiveTypography(context: Context): Typography {
@@ -157,12 +162,12 @@ private fun buildExpressiveTypography(context: Context): Typography {
         titleSmall = f.brand("title-small", 14.sp, 20.sp, FontWeight.Medium),
         titleSmallEmphasized = f.brandEmphasized("title-small", 14.sp, 20.sp),
 
-        bodyLarge = f.plain("body-large", 16.sp, 24.sp),
-        bodyLargeEmphasized = f.plainEmphasized("body-large", 16.sp, 24.sp),
-        bodyMedium = f.plain("body-medium", 14.sp, 20.sp),
-        bodyMediumEmphasized = f.plainEmphasized("body-medium", 14.sp, 20.sp),
-        bodySmall = f.plain("body-small", 12.sp, 16.sp, tracking = 0.00833333.em),
-        bodySmallEmphasized = f.plainEmphasized("body-small", 12.sp, 16.sp),
+        bodyLarge = f.plain("body-large", 16.sp, 24.sp, hyphens = Hyphens.Auto),
+        bodyLargeEmphasized = f.plainEmphasized("body-large", 16.sp, 24.sp, hyphens = Hyphens.Auto),
+        bodyMedium = f.plain("body-medium", 14.sp, 20.sp, hyphens = Hyphens.Auto),
+        bodyMediumEmphasized = f.plainEmphasized("body-medium", 14.sp, 20.sp, hyphens = Hyphens.Auto),
+        bodySmall = f.plain("body-small", 12.sp, 16.sp, tracking = 0.00833333.em, hyphens = Hyphens.Auto),
+        bodySmallEmphasized = f.plainEmphasized("body-small", 12.sp, 16.sp, hyphens = Hyphens.Auto),
 
         labelLarge = f.plain("label-large", 14.sp, 20.sp, FontWeight.Medium),
         labelLargeEmphasized = f.plainEmphasized("label-large", 14.sp, 20.sp),

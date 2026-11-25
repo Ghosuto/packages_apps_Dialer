@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.ViewCompat
@@ -85,11 +86,13 @@ class ExpressiveSettingsActivity : FragmentActivity(), PreferenceFragmentCompat.
                                 modifier = Modifier.padding(top = 8.dp)) {
                                 Symbol(DialerSymbol.Back, stringResource(R.string.expressive_back))
                             }
+                            val headingEffects = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+                            val headingSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
                             AnimatedContent(heading.toString(),
                                 modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 16.dp),
                                 transitionSpec = {
-                                    (fadeIn(tween(220)) + slideInVertically(tween(280, easing = FastOutSlowInEasing)) { it / 5 })
-                                        .togetherWith(fadeOut(tween(100)))
+                                    (fadeIn(headingEffects) + slideInVertically(headingSpatial) { it / 5 })
+                                        .togetherWith(fadeOut(headingEffects))
                                 }, label = "settings heading") { title ->
                                 Text(title, Modifier.semantics { heading() },
                                     style = MaterialTheme.typography.headlineLargeEmphasized)

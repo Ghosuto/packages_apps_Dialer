@@ -19,9 +19,9 @@
     androidx.compose.ui.ExperimentalComposeUiApi::class)
 package com.android.dialer.expressive
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -84,7 +84,9 @@ internal fun DialpadSheet(
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(DialpadSuggestionsHeight),
+                        modifier = Modifier.fillMaxWidth()
+                            .heightIn(max = DialpadSuggestionsHeight)
+                            .animateContentSize(MaterialTheme.motionScheme.defaultSpatialSpec()),
                         contentAlignment = Alignment.BottomCenter
                     ) {
                         DialpadSuggestions(numberMatches, digits, onCall, onAddContact, grouped = true)
@@ -111,11 +113,15 @@ internal fun DialpadSheet(
 
 @Composable
 private fun DialpadNumberField(input: TextFieldValue, onInput: (TextFieldValue) -> Unit, inlineBackspace: Boolean) {
-    Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             InterceptPlatformTextInput(interceptor = { _, _ -> awaitCancellation() }) {
                 TextField(input, onInput, Modifier.weight(1f),
-                    textStyle = MaterialTheme.typography.headlineLargeEmphasized.copy(textAlign = TextAlign.Center, textDirection = TextDirection.Ltr),
+                    textStyle = MaterialTheme.typography.headlineLargeEmphasized.copy(
+                        textAlign = TextAlign.Center,
+                        textDirection = TextDirection.Ltr,
+                        fontFeatureSettings = "tnum"
+                    ),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, showKeyboardOnFocus = false),
                     placeholder = { Text(stringResource(R.string.expressive_enter_number),
@@ -126,6 +132,7 @@ private fun DialpadNumberField(input: TextFieldValue, onInput: (TextFieldValue) 
             }
             if (inlineBackspace) DialpadBackspace(input, onInput, Modifier.width(56.dp))
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
     }
 }
 
@@ -134,7 +141,8 @@ private fun DialpadBackspace(input: TextFieldValue, onInput: (TextFieldValue) ->
     ExpressiveTile(onClick = { onInput(deleteDialpadSelection(input)) },
         onLongClick = { onInput(TextFieldValue("")) },
         onLongClickLabel = stringResource(R.string.expressive_clear_number),
-        enabled = input.text.isNotEmpty(), highlightOnPress = true, modifier = modifier,
+        enabled = input.text.isNotEmpty(), highlightOnPress = true,
+        restingRadius = 52.dp, pressedRadius = 18.dp, modifier = modifier,
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
         Symbol(DialerSymbol.Backspace, stringResource(R.string.expressive_backspace))
@@ -143,7 +151,8 @@ private fun DialpadBackspace(input: TextFieldValue, onInput: (TextFieldValue) ->
 
 @Composable
 private fun DialpadCallButton(digits: String, onCall: (String) -> Unit, modifier: Modifier) {
-    ExpressiveTile(onClick = { onCall(digits) }, enabled = digits.isNotBlank(), modifier = modifier,
+    ExpressiveTile(onClick = { onCall(digits) }, enabled = digits.isNotBlank(),
+        restingRadius = 52.dp, pressedRadius = 20.dp, modifier = modifier,
         color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
         Symbol(DialerSymbol.Phone)
         Text(stringResource(R.string.expressive_call), Modifier.padding(start = 12.dp),
@@ -157,19 +166,18 @@ private fun DialpadSuggestions(
     grouped: Boolean = false
 ) {
     if (matches.isEmpty()) {
-        TextButton(onClick = { onAddContact(digits) }, enabled = digits.isNotBlank()) {
-            Text(stringResource(R.string.expressive_create_contact))
+        if (digits.isNotBlank()) {
+            TextButton(onClick = { onAddContact(digits) }) {
+                Symbol(DialerSymbol.Add, modifier = Modifier.size(18.dp))
+                Text(stringResource(R.string.expressive_create_contact), Modifier.padding(start = 6.dp))
+            }
         }
     } else if (grouped) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             matches.forEachIndexed { index, match ->
                 key(match.id, match.number) {
                     Surface(onClick = { onCall(match.number) },
-                        shape = RoundedCornerShape(
-                            topStart = if (index == 0) 24.dp else 4.dp,
-                            topEnd = if (index == 0) 24.dp else 4.dp,
-                            bottomStart = if (index == matches.lastIndex) 24.dp else 4.dp,
-                            bottomEnd = if (index == matches.lastIndex) 24.dp else 4.dp),
+                        shape = dialerGroupedShape(index == 0, index == matches.lastIndex),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                         Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -31,6 +31,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -55,6 +56,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.fragment.app.Fragment
@@ -268,18 +270,36 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
                                 CallStatus(hyperOs)
                             }
                             val spamStatus = primaryInfoState.carrierSpamStatus()
-                            if (primaryInfoState.isSpam() || spamStatus == CarrierCallIdentity.SPAM_CONFIRMED)
-                                Text(stringResource(R.string.expressive_confirmed_spam), Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.error)
-                            else if (spamStatus == CarrierCallIdentity.SPAM_SUSPECTED)
-                                Text(stringResource(R.string.expressive_suspected_spam), Modifier.padding(top = 8.dp), color = Color(0xFFB26A00))
-                            else if (primaryInfoState.callerVerificationStatus() == CarrierCallIdentity.VERIFICATION_VERIFIED)
-                                Text(stringResource(R.string.expressive_verified_caller), Modifier.padding(top = 8.dp), color = Color(0xFF16834B))
-                            else if (primaryInfoState.callerVerificationStatus() == CarrierCallIdentity.VERIFICATION_UNVERIFIED)
-                                Text(stringResource(R.string.expressive_unverified_caller), Modifier.padding(top = 8.dp),
-                                    color = if (hyperOs) LocalContentColor.current.copy(alpha = .76f) else MaterialTheme.colorScheme.onSurfaceVariant)
-                            else if (spamStatus == CarrierCallIdentity.SPAM_NOT_SPAM)
-                                Text(stringResource(R.string.expressive_not_spam), Modifier.padding(top = 8.dp),
-                                    color = if (hyperOs) LocalContentColor.current.copy(alpha = .76f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (hyperOs) {
+                                if (primaryInfoState.isSpam() || spamStatus == CarrierCallIdentity.SPAM_CONFIRMED)
+                                    Text(stringResource(R.string.expressive_confirmed_spam), Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.error)
+                                else if (spamStatus == CarrierCallIdentity.SPAM_SUSPECTED)
+                                    Text(stringResource(R.string.expressive_suspected_spam), Modifier.padding(top = 8.dp), color = Color(0xFFB26A00))
+                                else if (primaryInfoState.callerVerificationStatus() == CarrierCallIdentity.VERIFICATION_VERIFIED)
+                                    Text(stringResource(R.string.expressive_verified_caller), Modifier.padding(top = 8.dp), color = Color(0xFF16834B))
+                                else if (primaryInfoState.callerVerificationStatus() == CarrierCallIdentity.VERIFICATION_UNVERIFIED)
+                                    Text(stringResource(R.string.expressive_unverified_caller), Modifier.padding(top = 8.dp),
+                                        color = LocalContentColor.current.copy(alpha = .76f))
+                                else if (spamStatus == CarrierCallIdentity.SPAM_NOT_SPAM)
+                                    Text(stringResource(R.string.expressive_not_spam), Modifier.padding(top = 8.dp),
+                                        color = LocalContentColor.current.copy(alpha = .76f))
+                            } else {
+                                if (primaryInfoState.isSpam() || spamStatus == CarrierCallIdentity.SPAM_CONFIRMED)
+                                    ExpressiveStatusBadge(stringResource(R.string.expressive_confirmed_spam), CallerBadgeTone.Error,
+                                        Modifier.padding(top = 10.dp), DialerSymbol.Block)
+                                else if (spamStatus == CarrierCallIdentity.SPAM_SUSPECTED)
+                                    ExpressiveStatusBadge(stringResource(R.string.expressive_suspected_spam), CallerBadgeTone.Warning,
+                                        Modifier.padding(top = 10.dp), DialerSymbol.Info)
+                                else if (primaryInfoState.callerVerificationStatus() == CarrierCallIdentity.VERIFICATION_VERIFIED)
+                                    ExpressiveStatusBadge(stringResource(R.string.expressive_verified_caller), CallerBadgeTone.Verified,
+                                        Modifier.padding(top = 10.dp), DialerSymbol.Check)
+                                else if (primaryInfoState.callerVerificationStatus() == CarrierCallIdentity.VERIFICATION_UNVERIFIED)
+                                    ExpressiveStatusBadge(stringResource(R.string.expressive_unverified_caller), CallerBadgeTone.Neutral,
+                                        Modifier.padding(top = 10.dp))
+                                else if (spamStatus == CarrierCallIdentity.SPAM_NOT_SPAM)
+                                    ExpressiveStatusBadge(stringResource(R.string.expressive_not_spam), CallerBadgeTone.Neutral,
+                                        Modifier.padding(top = 10.dp))
+                            }
                             if (!hyperOs) primaryInfoState.location()?.takeIf { it.isNotBlank() }?.let {
                                 Text(it, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium,
                                     color = if (hyperOs) LocalContentColor.current.copy(alpha = .76f) else LocalContentColor.current)
@@ -313,72 +333,128 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
                                     }
                                 }
                                 AnimatedVisibility(!localVoicemailActive && !dialpad && primaryInfoState.showInCallButtonGrid()) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        val buttons = if (roundedControls) ROUNDED_CONTROL_IDS
-                                        else listOf(BUTTON_AUDIO, BUTTON_MUTE, BUTTON_DIALPAD, BUTTON_HOLD,
-                                            BUTTON_ADD_CALL, BUTTON_RECORD_CALL, BUTTON_MERGE, BUTTON_UPGRADE_TO_VIDEO,
-                                            BUTTON_UPGRADE_TO_RTT, BUTTON_SWAP_SIM, BUTTON_SWAP,
-                                            BUTTON_MANAGE_VOICE_CONFERENCE)
-                                        val totalPages = { (buttons.size + CALL_CONTROLS_PER_PAGE - 1) /
-                                            CALL_CONTROLS_PER_PAGE }
-                                        val pagerState = rememberPagerState(initialPage = 0, pageCount = totalPages)
-                                        LaunchedEffect(totalPages()) {
-                                            val lastPage = (totalPages() - 1).coerceAtLeast(0)
-                                            if (pagerState.currentPage > lastPage) pagerState.scrollToPage(lastPage)
-                                        }
-                                        if (totalPages() > 1) {
-                                            Row(
-                                                Modifier.fillMaxWidth().alpha(.6f).semantics {
-                                                    contentDescription = getString(
-                                                        R.string.expressive_call_controls_page,
-                                                        pagerState.currentPage + 1,
-                                                        totalPages())
-                                                },
-                                                horizontalArrangement = Arrangement.Center,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                repeat(totalPages()) { index ->
-                                                    Box(
-                                                        Modifier.padding(horizontal = 4.dp).size(8.dp)
-                                                            .background(
-                                                                if (index == pagerState.currentPage)
-                                                                    MaterialTheme.colorScheme.primary
-                                                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                CircleShape))
+                                    val buttons = if (roundedControls) ROUNDED_CONTROL_IDS
+                                    else listOf(BUTTON_AUDIO, BUTTON_MUTE, BUTTON_DIALPAD, BUTTON_HOLD,
+                                        BUTTON_ADD_CALL, BUTTON_RECORD_CALL, BUTTON_MERGE, BUTTON_UPGRADE_TO_VIDEO,
+                                        BUTTON_UPGRADE_TO_RTT, BUTTON_SWAP_SIM, BUTTON_SWAP,
+                                        BUTTON_MANAGE_VOICE_CONFERENCE)
+                                    val totalPages = { (buttons.size + CALL_CONTROLS_PER_PAGE - 1) /
+                                        CALL_CONTROLS_PER_PAGE }
+                                    val pagerState = rememberPagerState(initialPage = 0, pageCount = totalPages)
+                                    LaunchedEffect(totalPages()) {
+                                        val lastPage = (totalPages() - 1).coerceAtLeast(0)
+                                        if (pagerState.currentPage > lastPage) pagerState.scrollToPage(lastPage)
+                                    }
+                                    val controlsContent: @Composable () -> Unit = {
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(if (roundedControls) 8.dp else 10.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            if (totalPages() > 1) {
+                                                Row(
+                                                    Modifier.fillMaxWidth().let { if (roundedControls) it.alpha(.6f) else it }.semantics {
+                                                        contentDescription = getString(
+                                                            R.string.expressive_call_controls_page,
+                                                            pagerState.currentPage + 1,
+                                                            totalPages())
+                                                    },
+                                                    horizontalArrangement = Arrangement.Center,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    repeat(totalPages()) { index ->
+                                                        val active = index == pagerState.currentPage
+                                                        if (roundedControls) {
+                                                            Box(
+                                                                Modifier.padding(horizontal = 4.dp).size(8.dp)
+                                                                    .background(
+                                                                        if (active) MaterialTheme.colorScheme.primary
+                                                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                        CircleShape))
+                                                        } else {
+                                                            val dotWidth by animateDpAsState(
+                                                                if (active) 20.dp else 6.dp,
+                                                                MaterialTheme.motionScheme.fastSpatialSpec(),
+                                                                label = "pager dot"
+                                                            )
+                                                            Box(
+                                                                Modifier.padding(horizontal = 3.dp)
+                                                                    .width(dotWidth)
+                                                                    .height(6.dp)
+                                                                    .background(
+                                                                        if (active) MaterialTheme.colorScheme.primary
+                                                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .35f),
+                                                                        CircleShape))
+                                                        }
+                                                    }
                                                 }
                                             }
-                                        }
-                                        HorizontalPager(
-                                            state = pagerState,
-                                            modifier = Modifier.fillMaxWidth().height(CALL_CONTROL_PAGER_HEIGHT),
-                                        ) { page ->
-                                            Column(
-                                                Modifier.fillMaxWidth().height(CALL_CONTROL_PAGER_HEIGHT),
-                                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                            ) {
-                                                repeat(CALL_CONTROL_ROWS) { row ->
-                                                    Row(
-                                                        Modifier.fillMaxWidth().height(CALL_CONTROL_ROW_HEIGHT),
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    ) {
-                                                        repeat(CALL_CONTROL_COLUMNS) { column ->
-                                                            val index = page * CALL_CONTROLS_PER_PAGE +
-                                                                row * CALL_CONTROL_COLUMNS + column
-                                                            val id = buttons.getOrNull(index)
-                                                            if (id == null) {
-                                                                Spacer(Modifier.weight(1f).fillMaxHeight())
-                                                            } else {
-                                                                key(id) {
-                                                                    CallControl(id, Modifier.weight(1f).fillMaxHeight(), roundedControls)
+                                            val rowHeight = if (roundedControls) CALL_CONTROL_ROW_HEIGHT else 92.dp
+                                            val pagerHeight = if (roundedControls) CALL_CONTROL_PAGER_HEIGHT else rowHeight * CALL_CONTROL_ROWS + 8.dp
+                                            HorizontalPager(
+                                                state = pagerState,
+                                                modifier = Modifier.fillMaxWidth().height(pagerHeight),
+                                            ) { page ->
+                                                Column(
+                                                    Modifier.fillMaxWidth().height(pagerHeight),
+                                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                                ) {
+                                                    repeat(CALL_CONTROL_ROWS) { row ->
+                                                        Row(
+                                                            Modifier.fillMaxWidth().height(rowHeight),
+                                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        ) {
+                                                            repeat(CALL_CONTROL_COLUMNS) { column ->
+                                                                val index = page * CALL_CONTROLS_PER_PAGE +
+                                                                    row * CALL_CONTROL_COLUMNS + column
+                                                                val id = buttons.getOrNull(index)
+                                                                if (id == null) {
+                                                                    Spacer(Modifier.weight(1f).fillMaxHeight())
+                                                                } else {
+                                                                    key(id) {
+                                                                        CallControl(id, Modifier.weight(1f).fillMaxHeight(), roundedControls)
+                                                                    }
                                                                 }
                                                             }
                                                         }
                                                     }
                                                 }
                                             }
+                                            if (recording) {
+                                                if (roundedControls) {
+                                                    Text(stringResource(R.string.expressive_recording_duration, DateUtils.formatElapsedTime(recordingDuration / 1000)),
+                                                        color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                                                } else {
+                                                    Surface(
+                                                        shape = CircleShape,
+                                                        color = MaterialTheme.colorScheme.errorContainer,
+                                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                                                    ) {
+                                                        Row(
+                                                            Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Symbol(DialerSymbol.Record, modifier = Modifier.size(14.dp))
+                                                            Text(
+                                                                stringResource(R.string.expressive_recording_duration, DateUtils.formatElapsedTime(recordingDuration / 1000)),
+                                                                style = MaterialTheme.typography.labelMediumEmphasized.copy(fontFeatureSettings = "tnum")
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
-                                        if (recording) Text(stringResource(R.string.expressive_recording_duration, DateUtils.formatElapsedTime(recordingDuration / 1000)),
-                                            color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                                    }
+                                    if (roundedControls) {
+                                        controlsContent()
+                                    } else {
+                                        Surface(
+                                            shape = RoundedCornerShape(32.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = .92f),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = .28f))
+                                        ) {
+                                            Box(Modifier.padding(horizontal = 12.dp, vertical = 14.dp)) { controlsContent() }
+                                        }
                                     }
                                 }
                             }
@@ -397,11 +473,22 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
                         if (!localVoicemailActive && primaryInfoState.showInCallButtonGrid())
                             CallControl(BUTTON_DIALPAD, Modifier.weight(1f), roundedControls = true)
                         else Spacer(Modifier.weight(1f))
-                    } else ExpressiveTile(onClick = { endCall() }, enabled = endEnabled,
-                        modifier = Modifier.widthIn(max = 260.dp).fillMaxWidth().heightIn(min = 64.dp),
-                        color = EndCallRed, contentColor = Color.White) {
+                    } else ExpressiveTile(
+                        onClick = { endCall() },
+                        enabled = endEnabled,
+                        restingRadius = 52.dp,
+                        selectedRadius = 24.dp,
+                        pressedRadius = 20.dp,
+                        modifier = Modifier.widthIn(max = 280.dp).fillMaxWidth().heightIn(min = 64.dp),
+                        color = EndCallRed,
+                        contentColor = Color.White
+                    ) {
                         Symbol(DialerSymbol.EndCall)
-                        Text(stringResource(R.string.expressive_end_call), Modifier.padding(start = 12.dp))
+                        Text(
+                            stringResource(R.string.expressive_end_call),
+                            Modifier.padding(start = 12.dp),
+                            style = MaterialTheme.typography.titleMediumEmphasized
+                        )
                     }
                 }
             }
@@ -476,10 +563,15 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
                 color = LocalContentColor.current.copy(alpha = .76f))
             return
         }
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary) {
-            Row(Modifier.padding(horizontal = 18.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(status, style = MaterialTheme.typography.labelLargeEmphasized)
+        val colors = MaterialTheme.colorScheme
+        val (pillContainer, pillContent) = when (primaryCallState.state()) {
+            DialerCallState.ACTIVE -> colors.secondaryContainer to colors.onSecondaryContainer
+            DialerCallState.DISCONNECTED, DialerCallState.DISCONNECTING -> colors.errorContainer to colors.onErrorContainer
+            else -> colors.surfaceContainerHigh to colors.onSurfaceVariant
+        }
+        Surface(shape = CircleShape, color = pillContainer, contentColor = pillContent) {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(status, style = MaterialTheme.typography.labelLargeEmphasized.copy(fontFeatureSettings = "tnum"))
             }
         }
     }
@@ -526,17 +618,39 @@ open class ExpressiveCallFragment : Fragment(), InCallScreen, InCallButtonUi, Au
         val monochromeActive = selected && LocalMonochromeTheme.current
         val dark = isSystemInDarkTheme()
         val colors = MaterialTheme.colorScheme
-        ExpressiveTile(onClick = { clickControl(id) }, modifier = modifier.semantics { this.selected = selected },
-            selected = selected, enabled = enabled,
-            color = if (monochromeActive) {
-                if (dark) Color.White else Color.Black
-            } else if (selected) colors.primaryContainer else colors.surfaceContainerHigh,
-            contentColor = if (monochromeActive) {
-                if (dark) Color.Black else Color.White
-            } else if (selected) colors.onPrimaryContainer else colors.onSurface) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Symbol(symbol); Text(label, style = if (selected) MaterialTheme.typography.labelMediumEmphasized
-                    else MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+        val recordingActive = id == BUTTON_RECORD_CALL && selected
+        ExpressiveTile(
+            onClick = { clickControl(id) },
+            modifier = modifier.semantics { this.selected = selected },
+            selected = selected,
+            enabled = enabled,
+            restingRadius = 52.dp,
+            selectedRadius = 20.dp,
+            pressedRadius = 16.dp,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+            color = when {
+                recordingActive -> colors.errorContainer
+                monochromeActive -> if (dark) Color.White else Color.Black
+                selected -> colors.primary
+                else -> colors.surfaceContainerHigh
+            },
+            contentColor = when {
+                recordingActive -> colors.onErrorContainer
+                monochromeActive -> if (dark) Color.Black else Color.White
+                selected -> colors.onPrimary
+                else -> colors.onSurface
+            }
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Symbol(symbol)
+                Text(
+                    label,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = if (selected) MaterialTheme.typography.labelMediumEmphasized
+                    else MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

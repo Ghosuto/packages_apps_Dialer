@@ -103,14 +103,28 @@ fun DialerHome(
     Scaffold(containerColor = MaterialTheme.colorScheme.surface,
         contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
-            Box(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 16.dp, vertical = 12.dp), Alignment.Center) {
-                FloatingDialerBar(tab, labels, onTab, compactFloatingBar, hiddenNavItems)
-            }
-        }, floatingActionButton = {
-            ExpressiveTile(onClick = { onKeypad(true) }, modifier = Modifier.size(64.dp),
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary) {
-                Symbol(DialerSymbol.Keypad, stringResource(R.string.expressive_keypad), Modifier.size(28.dp))
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().imePadding()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FloatingDialerBar(
+                    tab, labels, onTab, compactFloatingBar, hiddenNavItems,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                ExpressiveTile(
+                    onClick = { onKeypad(true) },
+                    modifier = Modifier.size(60.dp),
+                    restingRadius = 20.dp,
+                    pressedRadius = 15.dp,
+                    shadowElevation = 4.dp,
+                    contentPadding = PaddingValues(0.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Symbol(DialerSymbol.Keypad, stringResource(R.string.expressive_keypad), Modifier.size(26.dp))
+                }
             }
         }) { padding ->
         val direction = LocalLayoutDirection.current
@@ -129,12 +143,17 @@ fun DialerHome(
             }
         }
         Column(Modifier.padding(contentInsets).consumeWindowInsets(padding).fillMaxSize().widthIn(max = 840.dp)) {
-            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 12.dp, bottom = 16.dp),
+            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.expressive_phone), style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    AnimatedContent(labels.getOrElse(tab) { "" }, label = "page title") {
+                    val titleEffects = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+                    AnimatedContent(
+                        labels.getOrElse(tab) { "" },
+                        transitionSpec = { fadeIn(titleEffects) togetherWith fadeOut(titleEffects) },
+                        label = "page title"
+                    ) {
                         Text(it, Modifier.semantics { heading() },
                             style = MaterialTheme.typography.displaySmallEmphasized,
                             color = MaterialTheme.colorScheme.primary)
@@ -142,8 +161,14 @@ fun DialerHome(
                 }
                 FilledTonalIconButton(onClick = onSettings) { Symbol(DialerSymbol.Settings, stringResource(R.string.expressive_settings)) }
             }
-            if (tab != 1 && tab != 4) {
-                TextField(query, onQuery, Modifier.fillMaxWidth().padding(horizontal = 20.dp).heightIn(min = 60.dp),
+            AnimatedVisibility(
+                visible = tab != 1 && tab != 4,
+                enter = fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()) +
+                    expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()),
+                exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()) +
+                    shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec())
+            ) {
+                TextField(query, onQuery, Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 4.dp).heightIn(min = 56.dp),
                     textStyle = MaterialTheme.typography.bodyLarge,
                     placeholder = { Text(stringResource(R.string.expressive_search)) },
                     leadingIcon = { Symbol(DialerSymbol.Search) },
@@ -154,9 +179,11 @@ fun DialerHome(
                         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent))
             }
+            val pageEffects = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
+            val pageSpatial = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
             AnimatedContent(tab, Modifier.weight(1f), transitionSpec = {
-                (fadeIn(tween(180)) + slideInHorizontally(spring(.85f, 450f)) { if (targetState > initialState) it / 8 else -it / 8 }) togetherWith
-                    (fadeOut(tween(100)) + slideOutHorizontally { if (targetState > initialState) -it / 8 else it / 8 })
+                (fadeIn(pageEffects) + slideInHorizontally(pageSpatial) { if (targetState > initialState) it / 8 else -it / 8 }) togetherWith
+                    (fadeOut(pageEffects) + slideOutHorizontally(pageSpatial) { if (targetState > initialState) -it / 8 else it / 8 })
             }, label = "page") { page ->
                 val contacts = remember(data.people, query, page) {
                     searchPeople(if (page == 2) data.people.filter { it.starred } else data.people, query)
@@ -180,19 +207,25 @@ fun DialerHome(
                         contactsAllowed = data.contactsAllowed,
                         onAssign = onAssignSpeedDial,
                         onRemove = onRemoveSpeedDial,
-                        onCall = onCall
+                        onCall = onCall,
+                        bottomInset = bottomClearance
                     )
                     else -> LazyColumn(Modifier.fillMaxSize().then(
                         keyboardScrollConnection?.let { Modifier.nestedScroll(it) } ?: Modifier
                     ), contentPadding = PaddingValues(
-                        start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp + bottomClearance),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp + bottomClearance),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         if (page == 0) {
                             item {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FilterChip(!missedOnly, { missedOnly = false }, { Text(stringResource(R.string.expressive_all)) })
-                                    FilterChip(missedOnly, { missedOnly = true }, { Text(stringResource(R.string.expressive_missed)) })
-                                }
+                                ExpressiveChoiceGroup(
+                                    values = listOf(false, true),
+                                    selected = missedOnly,
+                                    label = { missed ->
+                                        stringResource(if (missed) R.string.expressive_missed else R.string.expressive_all)
+                                    },
+                                    onSelected = { missedOnly = it },
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
                             }
                             if (groups.isEmpty() && recentContactMatches.isEmpty()) item {
                                 EmptyDialerState(DialerSymbol.History, stringResource(R.string.expressive_no_calls),
@@ -223,14 +256,15 @@ fun DialerHome(
                                             else onCall(call.number)
                                         }, onRequestDelete = { delete = group },
                                         onDelete = { completed -> onDelete(group.calls, completed) },
-                                        shape = dialerGroupedShape(first, last),
+                                        first = first, last = last,
                                         modifier = Modifier.animateItem(placementSpec = null))
                                 }
                             }
                             if (recentContactMatches.isNotEmpty()) {
                                 item(key = "search_contacts_label") { SectionLabel(stringResource(R.string.expressive_contacts)) }
-                                items(recentContactMatches, key = { "search_contact_${it.id}:${it.number}" }) { contact ->
+                                itemsIndexed(recentContactMatches, key = { _, it -> "search_contact_${it.id}:${it.number}" }) { index, contact ->
                                     ContactRow(contact, onClick = { person = contact }, onCall = { onCall(contact.number) },
+                                        shape = dialerGroupedShape(index == 0, index == recentContactMatches.lastIndex),
                                         modifier = Modifier.animateItem())
                                 }
                             }
@@ -254,9 +288,9 @@ fun DialerHome(
                                     Row(Modifier.fillMaxWidth().animateItem().padding(vertical = 4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         row.forEach { contact ->
-                                            Surface(Modifier.weight(1f), shape = RoundedCornerShape(32.dp),
-                                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
+                                            Surface(Modifier.weight(1f), shape = RoundedCornerShape(24.dp),
+                                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                                contentColor = MaterialTheme.colorScheme.onSurface) {
                                                 Column(Modifier.fillMaxWidth().combinedClickable(
                                                     onClick = { person = contact }, onLongClick = { person = contact }).padding(16.dp),
                                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -444,10 +478,17 @@ fun DialerKeypad(onDigit: (String) -> Unit, onLongDigit: (String) -> Unit = onDi
                     ExpressiveTile(onClick = { tones.play(digit); onDigit(digit) },
                         onLongClick = { tones.play(digit); onLongDigit(digit) },
                         highlightOnPress = true,
+                        restingRadius = 52.dp,
+                        pressedRadius = 18.dp,
                         modifier = Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(digit, style = MaterialTheme.typography.headlineLargeEmphasized)
-                            Text(letters.ifBlank { " " }, style = MaterialTheme.typography.labelSmall, letterSpacing = 2.sp)
+                            Text(
+                                letters.ifBlank { " " },
+                                style = MaterialTheme.typography.labelSmall,
+                                letterSpacing = 1.5.sp,
+                                color = LocalContentColor.current.copy(alpha = .7f)
+                            )
                         }
                     }
                 }
