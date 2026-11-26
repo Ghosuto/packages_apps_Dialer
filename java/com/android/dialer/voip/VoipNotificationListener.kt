@@ -64,22 +64,21 @@ class VoipNotificationListener : NotificationListenerService() {
             })
     }
 
-    override fun onListenerConnected() { connected = true; refresh(false, true) }
-    override fun onListenerDisconnected() { connected = false; clearCalls() }
+    override fun onListenerConnected() {
+        connected = true
+        VoipTelecomCalls.onChanged = { refresh(it) }
+        refresh(true, true)
+    }
+    override fun onListenerDisconnected() {
+        connected = false
+        VoipTelecomCalls.onChanged = null
+        clearCalls()
+    }
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (VoipCalls.enabled(this) && sbn.packageName in VoipCalls.apps) refresh(true)
     }
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         if (VoipCalls.enabled(this) && sbn.packageName in VoipCalls.apps) {
-            val removed = VoipCalls.calls.value.filter {
-                it.key == sbn.key && it.notificationTime == sbn.postTime
-            }
-            removed.forEach { cancel(it) }
-            VoipCalls.replace(VoipCalls.calls.value.filter { it !in removed })
-            if (removed.isNotEmpty()) VoipCallHistory.observe(this, VoipCalls.calls.value)
-            if (removed.any { it.token == VoipRecordingService.state.value.token }) {
-                VoipRecordingService.stop(this)
-            }
             refresh(false)
         }
     }
@@ -91,11 +90,12 @@ class VoipNotificationListener : NotificationListenerService() {
         }
         try {
             val previous = VoipCalls.calls.value
-            val next = activeNotifications.orEmpty().mapNotNull { sbn ->
+            val notifications = activeNotifications.orEmpty().mapNotNull { sbn ->
                 try { VoipCalls.parse(this, sbn) }
                 catch (e: RuntimeException) { Log.w(TAG, "Invalid call notification", e); null }
             }
-            previous.filter { old -> next.none { it.token == old.token } }.forEach { cancel(it) }
+            val next = VoipTelecomCalls.merge(this, notifications)
+            previous.filter { old -> next.none { it.key == old.key && it.token == old.token } }.forEach { cancel(it) }
             VoipCalls.replace(next)
             if (syncHistory || next != previous) VoipCallHistory.observe(this, next)
             val manager = getSystemService(NotificationManager::class.java)
@@ -105,7 +105,7 @@ class VoipNotificationListener : NotificationListenerService() {
             next.forEach { call ->
                 val old = previous.firstOrNull { it.token == call.token }
                 if (old?.copy(notificationTime = call.notificationTime) != call) {
-                    notifyCall(call, allowAlert && old == null && call.incoming)
+                    notifyCall(call, allowAlert && old?.incoming != true && call.incoming)
                 }
             }
             val recording = VoipRecordingService.state.value
@@ -132,10 +132,10 @@ class VoipNotificationListener : NotificationListenerService() {
             .setCategory(Notification.CATEGORY_CALL)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setOngoing(true)
-            .setOnlyAlertOnce(true)
+            .setOnlyAlertOnce(!alert)
         call.actions.forEach { builder.addAction(Notification.Action.Builder(
             null, it.title, it.intent).build()) }
-        if (alert && manager.canUseFullScreenIntent()) builder.setFullScreenIntent(open, true)
+        if (call.incoming) builder.setFullScreenIntent(open, true)
         manager.notify(call.key, NOTIFICATION_ID, builder.build())
     }
 
@@ -153,6 +153,7 @@ class VoipNotificationListener : NotificationListenerService() {
     }
 
     override fun onDestroy() {
+        VoipTelecomCalls.onChanged = null
         VoipCalls.preferences(this).unregisterOnSharedPreferenceChangeListener(preferencesListener)
         clearCalls()
         super.onDestroy()
@@ -163,12 +164,19 @@ class VoipNotificationListener : NotificationListenerService() {
         private const val CHANNEL = "voip_calls"
         private const val NOTIFICATION_ID = 4100
         internal const val EXTRA_TOKEN = "voip_call_token"
+        internal fun openScreen(context: Context, token: String) {
+            context.startActivity(callScreen(context, token))
+        }
+
+        private fun callScreen(context: Context, token: String) =
+            Intent(context, VoipCallActivity::class.java)
+                .setData(Uri.Builder().scheme("dialer-voip").authority("call")
+                    .appendPath(token).build())
+                .putExtra(EXTRA_TOKEN, token)
+
         internal fun screenIntent(context: Context, token: String): PendingIntent =
             PendingIntent.getActivity(context, 0,
-                Intent(context, VoipCallActivity::class.java)
-                    .setData(Uri.Builder().scheme("dialer-voip").authority("call")
-                        .appendPath(token).build())
-                    .putExtra(EXTRA_TOKEN, token),
+                callScreen(context, token),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 }

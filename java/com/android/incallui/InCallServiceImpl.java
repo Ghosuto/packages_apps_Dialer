@@ -25,6 +25,7 @@ import android.telecom.Call;
 import android.telecom.CallAudioState;
 import android.telecom.InCallService;
 
+import com.android.dialer.voip.VoipTelecomCalls;
 import com.android.incallui.audiomode.AudioModeProvider;
 import com.android.incallui.call.CallList;
 import com.android.incallui.call.CallRecorder;
@@ -56,7 +57,11 @@ public class InCallServiceImpl extends InCallService {
   @Override
   public void onCallAdded(Call call) {
     Trace.beginSection("InCallServiceImpl.onCallAdded");
-    InCallPresenter.getInstance().onCallAdded(call);
+    if (call.getDetails().hasProperty(Call.Details.PROPERTY_SELF_MANAGED)) {
+      VoipTelecomCalls.add(this, call);
+    } else {
+      InCallPresenter.getInstance().onCallAdded(call);
+    }
     Trace.endSection();
   }
 
@@ -64,7 +69,11 @@ public class InCallServiceImpl extends InCallService {
   public void onCallRemoved(Call call) {
     Trace.beginSection("InCallServiceImpl.onCallRemoved");
 
-    InCallPresenter.getInstance().onCallRemoved(call);
+    if (call.getDetails().hasProperty(Call.Details.PROPERTY_SELF_MANAGED)) {
+      VoipTelecomCalls.remove(call);
+    } else {
+      InCallPresenter.getInstance().onCallRemoved(call);
+    }
     Trace.endSection();
   }
 
@@ -105,6 +114,7 @@ public class InCallServiceImpl extends InCallService {
   public boolean onUnbind(Intent intent) {
     Trace.beginSection("InCallServiceImpl.onUnbind");
     super.onUnbind(intent);
+    VoipTelecomCalls.clear();
 
     InCallPresenter.getInstance().onServiceUnbind();
     tearDown();

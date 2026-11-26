@@ -168,6 +168,9 @@
             </intent-filter>
         </service>
 
+        <receiver android:name="com.android.dialer.voip.VoipTelecomActionReceiver"
+            android:exported="false" />
+
         <service
             android:name="com.android.dialer.voip.VoipRecordingService"
             android:exported="false"
@@ -175,6 +178,8 @@
 
         <activity
             android:name="com.android.dialer.voip.VoipCallActivity"
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@style/Dialer.ThemeBase.NoActionBar" />
@@ -629,6 +634,9 @@
             <meta-data
                 android:name="android.telecom.IN_CALL_SERVICE_RINGING"
                 android:value="false" />
+            <meta-data
+                android:name="android.telecom.INCLUDE_SELF_MANAGED_CALLS"
+                android:value="true" />
             <meta-data
                 android:name="android.telecom.INCLUDE_EXTERNAL_CALLS"
                 android:value="true" />

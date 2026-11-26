@@ -15,6 +15,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Process
+import android.os.UserHandle
+import android.os.UserManager
 import android.service.notification.StatusBarNotification
 import android.widget.Toast
 import androidx.preference.PreferenceManager
@@ -38,7 +40,10 @@ internal data class VoipCall(
     val actions: List<VoipAction>,
     val contentIntent: PendingIntent?,
     val contactUri: String?,
-)
+    val recordingEligible: Boolean = !incoming,
+) {
+    val fromClone get() = UserHandle.getUserHandleForUid(uid) != Process.myUserHandle()
+}
 
 internal object VoipCalls {
     const val ENABLED = "universal_voip_calls"
@@ -78,50 +83,61 @@ internal object VoipCalls {
         }
     }
 
+    fun supportsUser(context: Context, user: UserHandle): Boolean {
+        if (user == Process.myUserHandle()) return true
+        if (user !in context.getSystemService(UserManager::class.java).userProfiles) return false
+        return context.createPackageContextAsUser("android", 0, user)
+            .getSystemService(UserManager::class.java).isCloneProfile
+    }
+
+    fun appLabel(context: Context, name: String, user: UserHandle): String =
+        if (user == Process.myUserHandle()) name
+        else context.getString(com.android.dialer.R.string.voip_clone_app, name)
+
     fun parse(context: Context, sbn: StatusBarNotification): VoipCall? {
         val appName = apps[sbn.packageName] ?: return null
-        if (sbn.user != Process.myUserHandle()) return null
+        val user = UserHandle.getUserHandleForUid(sbn.uid)
+        if (user != sbn.user) return null
+        val isClone = user != Process.myUserHandle()
+        if (!supportsUser(context, user)) return null
         val notification = sbn.notification
         if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return null
         val extras = notification.extras
-        val callType = extras.getInt(Notification.EXTRA_CALL_TYPE)
-        val hasCallStyle = callType == Notification.CallStyle.CALL_TYPE_INCOMING ||
-            callType == Notification.CallStyle.CALL_TYPE_ONGOING ||
-            callType == Notification.CallStyle.CALL_TYPE_SCREENING
-        if (!hasCallStyle && (notification.category != Notification.CATEGORY_CALL ||
-                notification.flags and Notification.FLAG_ONGOING_EVENT == 0)) return null
         val answer = extras.getParcelable(Notification.EXTRA_ANSWER_INTENT, PendingIntent::class.java)
         val decline = extras.getParcelable(Notification.EXTRA_DECLINE_INTENT, PendingIntent::class.java)
         val hangup = extras.getParcelable(Notification.EXTRA_HANG_UP_INTENT, PendingIntent::class.java)
-        val incoming = callType == Notification.CallStyle.CALL_TYPE_INCOMING
-        val actions = if (hasCallStyle) {
-            buildList {
-                if (incoming && decline != null) add(VoipAction(context.getString(
-                    com.android.dialer.R.string.voip_decline), decline))
-                if (incoming && answer != null) add(VoipAction(context.getString(
-                    com.android.dialer.R.string.voip_answer), answer))
-                if (!incoming && hangup != null) add(VoipAction(context.getString(
-                    com.android.dialer.R.string.voip_hang_up), hangup))
-            }
-        } else {
-            notification.actions.orEmpty().filter {
-                it.actionIntent != null && it.remoteInputs.isNullOrEmpty() &&
-                    !it.title.isNullOrBlank()
-            }.map { VoipAction(it.title.toString().take(100), it.actionIntent) }.take(4)
-        }
+        val appActions = notification.actions.orEmpty().filter {
+            it.actionIntent != null && it.remoteInputs.isNullOrEmpty() && !it.title.isNullOrBlank()
+        }.map { VoipAction(it.title.toString().take(100), it.actionIntent) }
+        val state = VoipNotificationState.detect(notification, appActions.map { it.title },
+            answer != null, decline != null, hangup != null) ?: return null
+        val incoming = state == VoipNotificationState.INCOMING
+        val ongoing = state == VoipNotificationState.ONGOING
+
+        val actions = buildList {
+            if (incoming && decline != null) add(VoipAction(context.getString(
+                com.android.dialer.R.string.voip_decline), decline))
+            if (incoming && answer != null) add(VoipAction(context.getString(
+                com.android.dialer.R.string.voip_answer), answer))
+            if (!incoming && hangup != null) add(VoipAction(context.getString(
+                com.android.dialer.R.string.voip_hang_up), hangup))
+            addAll(appActions)
+        }.distinctBy { it.intent }.take(4)
         val caller = extras.getParcelable(Notification.EXTRA_CALL_PERSON, Person::class.java)
             ?.name?.toString()?.takeIf { it.isNotBlank() }
             ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
                 ?.takeIf { it.isNotBlank() } ?: appName
-        val contactUri = VoipContacts.notificationContact(context, sbn.packageName, notification)
+        val contactUri = if (isClone) null else VoipContacts.notificationContact(context, sbn.packageName, notification)
         val previous = calls.value.firstOrNull {
             it.key == sbn.key && it.uid == sbn.uid && !(incoming && it.ongoing) &&
                 !(it.contactUri?.startsWith("tel:") == true && contactUri?.startsWith("tel:") == true &&
                     it.contactUri != contactUri)
         }
         return VoipCall(sbn.key, previous?.token ?: UUID.randomUUID().toString(),
-            sbn.packageName, sbn.uid, appName, caller.take(200), incoming,
-            callType == Notification.CallStyle.CALL_TYPE_ONGOING, previous?.date ?: sbn.postTime,
+            sbn.packageName, sbn.uid,
+            appLabel(context, appName, user),
+            caller.take(200), incoming,
+            ongoing, previous?.date ?: sbn.postTime,
             sbn.postTime, actions,
             notification.contentIntent,
             if (previous?.contactUri?.startsWith("tel:") == true) previous.contactUri

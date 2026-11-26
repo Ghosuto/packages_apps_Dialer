@@ -8,6 +8,8 @@
 package com.android.dialer.voip
 
 import android.Manifest
+import android.app.NotificationManager
+import android.net.Uri
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -21,6 +23,7 @@ import com.android.dialer.expressive.ExpressivePreferenceFragment
 
 class VoipSettingsFragment : ExpressivePreferenceFragment() {
     private lateinit var access: Preference
+    private lateinit var fullScreen: Preference
     private lateinit var notifications: Preference
     private lateinit var recording: SwitchPreferenceCompat
     private lateinit var autoRecording: SwitchPreferenceCompat
@@ -68,6 +71,14 @@ class VoipSettingsFragment : ExpressivePreferenceFragment() {
                 .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         }
         preferenceScreen.addPreference(notifications)
+        fullScreen = Preference(context).apply {
+            setTitle(R.string.voip_full_screen)
+            setSummary(R.string.voip_full_screen_summary)
+            isIconSpaceReserved = false
+            intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                Uri.fromParts("package", context.packageName, null))
+        }
+        preferenceScreen.addPreference(fullScreen)
         recording = SwitchPreferenceCompat(context).apply {
             key = VoipCalls.RECORDING_ENABLED
             setTitle(R.string.voip_recording_title)
@@ -117,6 +128,9 @@ class VoipSettingsFragment : ExpressivePreferenceFragment() {
         super.onResume()
         access.setSummary(if (VoipCalls.hasNotificationAccess(requireContext()))
             R.string.voip_access_granted else R.string.voip_access_needed)
+        val context = requireContext()
+        fullScreen.isVisible = !context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent() &&
+            fullScreen.intent?.resolveActivity(context.packageManager) != null
         val hasPermission = requireContext().checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
         notifications.setSummary(if (hasPermission) R.string.voip_notifications_summary

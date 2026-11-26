@@ -56,7 +56,7 @@ internal object VoipCallHistory {
                     db.beginTransaction()
                     try {
                         val ids = mutableListOf<Long>()
-                        if (enabled) calls.forEach { call ->
+                        if (enabled) calls.filterNot { it.fromClone }.forEach { call ->
                             var id = findId(db, "session_token = ?", arrayOf(call.token))
                             if (id == null) {
                                 id = findId(db, "notification_key = ? AND package_name = ? " +

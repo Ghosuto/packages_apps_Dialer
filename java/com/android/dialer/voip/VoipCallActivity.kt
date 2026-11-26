@@ -11,6 +11,8 @@ package com.android.dialer.voip
 import android.Manifest
 import android.app.ActivityOptions
 import android.app.PendingIntent
+import android.content.pm.LauncherApps
+import android.os.UserHandle
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -39,6 +41,7 @@ import com.android.dialer.expressive.Symbol
 import kotlinx.coroutines.delay
 
 class VoipCallActivity : FragmentActivity() {
+    private var screenToken by mutableStateOf<String?>(null)
     private var recordingEnabled by mutableStateOf(false)
 
     override fun onResume() {
@@ -49,13 +52,22 @@ class VoipCallActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val token = intent.getStringExtra(VoipNotificationListener.EXTRA_TOKEN)
-        if (token == null || !VoipCalls.enabled(this)) { finish(); return }
-        setShowWhenLocked(true)
-        setTurnScreenOn(VoipCalls.find(token)?.incoming == true)
+        updateCall(intent)
         setContent {
-            DialerExpressiveTheme { CallScreen(token) }
+            DialerExpressiveTheme { screenToken?.let { key(it) { CallScreen(it) } } }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        updateCall(intent)
+    }
+
+    private fun updateCall(intent: Intent) {
+        screenToken = intent.getStringExtra(VoipNotificationListener.EXTRA_TOKEN)
+        if (screenToken == null || !VoipCalls.enabled(this)) { finish(); return }
+        setTurnScreenOn(VoipCalls.find(screenToken)?.incoming == true)
     }
 
     @Composable
@@ -64,6 +76,12 @@ class VoipCallActivity : FragmentActivity() {
         val call = calls.firstOrNull { it.token == token }
         val recording by VoipRecordingService.state.collectAsState()
         val ownRecording = recording.takeIf { it.token == token }
+        LaunchedEffect(call == null, ownRecording) {
+            if (call == null && ownRecording == null) {
+                delay(800)
+                finish()
+            }
+        }
         val permissionRequest = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()) { granted ->
             if (granted.isNotEmpty() && granted.values.all { it }) VoipRecordingService.start(this, token)
@@ -108,7 +126,7 @@ class VoipCallActivity : FragmentActivity() {
                     OutlinedButton(onClick = { openApp(call) }, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.voip_open_app, call.appName))
                     }
-                    if (recordingEnabled && !call.incoming) {
+                    if (recordingEnabled && (call.recordingEligible || ownRecording?.busy == true)) {
                         FilledTonalButton(
                             onClick = {
                                 if (ownRecording?.busy == true) VoipRecordingService.stop(this@VoipCallActivity)
@@ -171,7 +189,13 @@ class VoipCallActivity : FragmentActivity() {
         try {
             if (VoipCalls.find(call.token) == null) return
             if (call.contentIntent != null) sendIntent(call.contentIntent)
-            else packageManager.getLaunchIntentForPackage(call.packageName)?.let { startActivity(it) }
+            else if (call.fromClone) {
+                val launcher = getSystemService(LauncherApps::class.java)
+                val user = UserHandle.getUserHandleForUid(call.uid)
+                val activity = launcher.getActivityList(call.packageName, user).firstOrNull()
+                    ?: throw IllegalStateException("Calling app is unavailable")
+                launcher.startMainActivity(activity.componentName, user, null, null)
+            } else VoipCalls.openApp(this, call.packageName)
         } catch (_: Exception) {
             Toast.makeText(this, R.string.voip_action_failed, Toast.LENGTH_LONG).show()
         }

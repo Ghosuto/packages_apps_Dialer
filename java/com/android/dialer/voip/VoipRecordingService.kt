@@ -213,7 +213,7 @@ class VoipRecordingService : Service() {
             VoipCalls.recordingEnabled(context) && VoipCalls.hasNotificationAccess(context) &&
                 (!automatic || (VoipCalls.autoRecordingEnabled(context) &&
                     hasBackgroundRecordingPermission(context))) &&
-                VoipCalls.calls.value.singleOrNull()?.token == call.token && !call.incoming &&
+                VoipCalls.calls.value.singleOrNull()?.let { it.token == call.token && it.recordingEligible } == true &&
                 context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
                 context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED &&
                 context.getSystemService(NotificationManager::class.java).areNotificationsEnabled() &&

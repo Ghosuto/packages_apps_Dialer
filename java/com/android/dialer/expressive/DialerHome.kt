@@ -21,6 +21,8 @@ package com.android.dialer.expressive
 import android.provider.CallLog.Calls
 import android.content.Intent
 import com.android.dialer.voip.rememberVoipContactOpener
+import com.android.dialer.voip.VoipCalls
+import com.android.dialer.voip.VoipNotificationListener
 import com.android.dialer.voip.VoipRecordingsActivity
 import android.telephony.PhoneNumberUtils
 import android.text.format.DateUtils
@@ -143,6 +145,19 @@ fun DialerHome(
             }
         }
         Column(Modifier.padding(contentInsets).consumeWindowInsets(padding).fillMaxSize().widthIn(max = 840.dp)) {
+            val liveCalls by VoipCalls.calls.collectAsState()
+            liveCalls.forEach { call ->
+                FilledTonalButton(
+                    onClick = { VoipNotificationListener.openScreen(context, call.token) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(call.caller, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(stringResource(if (call.incoming) R.string.voip_incoming_app
+                            else R.string.voip_call_app, call.appName))
+                    }
+                }
+            }
             Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

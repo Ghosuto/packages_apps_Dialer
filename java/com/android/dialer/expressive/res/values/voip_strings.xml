@@ -19,6 +19,9 @@
     <string name="voip_recordings_summary">Saved in Recordings/VoIP calls</string>
     <string name="voip_compatibility_title">App compatibility</string>
     <string name="voip_compatibility_summary">Available controls depend on the app’s call notifications. Open the app for video, microphone, and audio routing controls. Recording both voices depends on the app and device; some apps block their call audio.</string>
+    <string name="voip_full_screen">Full-screen call alerts</string>
+    <string name="voip_full_screen_summary">Allow Dialer to show the caller screen when the device is locked</string>
+    <string name="voip_clone_app">%1$s (cloned app)</string>
     <string name="voip_answer">Answer</string>
     <string name="voip_decline">Decline</string>
     <string name="voip_hang_up">End call</string>

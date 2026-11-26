@@ -22,6 +22,8 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.*
 import android.provider.CallLog.Calls
+import com.android.dialer.voip.VoipCalls
+import com.android.dialer.voip.VoipNotificationListener
 import com.android.dialer.voip.VoipCallHistory
 import kotlinx.coroutines.flow.collect
 import android.provider.ContactsContract
@@ -87,6 +89,7 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         }
     }
     private var voipHistoryJob: Job? = null
+    private var incomingVoipJob: Job? = null
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) { refresh() }
     }
@@ -257,6 +260,15 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         voipHistoryJob = activity.lifecycleScope.launch {
             VoipCallHistory.revision.collect { refresh() }
         }
+        incomingVoipJob?.cancel()
+        var ringing = VoipCalls.calls.value.filter { it.incoming }.map { it.token }.toSet()
+        incomingVoipJob = activity.lifecycleScope.launch {
+            VoipCalls.calls.collect { calls ->
+                val incoming = calls.filter { it.incoming }.map { it.token }.toSet()
+                (incoming - ringing).firstOrNull()?.let { VoipNotificationListener.openScreen(activity, it) }
+                ringing = incoming
+            }
+        }
         if (!observing) {
             activity.contentResolver.registerContentObserver(Calls.CONTENT_URI, true, observer)
             activity.contentResolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
@@ -264,6 +276,8 @@ class ExpressiveMainActivityPeer(private val activity: MainActivity) : MainActiv
         }
     }
     override fun onActivityPause() {
+        incomingVoipJob?.cancel()
+        incomingVoipJob = null
         voipHistoryJob?.cancel()
         voipHistoryJob = null
         if (observing) activity.contentResolver.unregisterContentObserver(observer)
